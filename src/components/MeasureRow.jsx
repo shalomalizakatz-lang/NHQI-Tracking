@@ -40,14 +40,11 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{m.short}</div>
+          <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>
+            {m.short}{m.pointsApproximate && <span style={{ color: "#f59e0b", marginLeft: 6 }}>⚠</span>}
+          </div>
           <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{m.full}</div>
           {m.note && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{m.note}</div>}
-          {m.pointsApproximate && (
-            <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 2 }}>
-              ⚠ DOH's real points for this measure sometimes differ ±1 from the standard quintile table (seen in ~18-22% of 2023 facility rows) — likely a statistical-significance adjustment we can't reproduce from published data. Treat 2025 points here as directional.
-            </div>
-          )}
         </div>
         {ptsDelta !== null && (
           <div style={{ background: ptsDelta > 0 ? "#14532d" : ptsDelta < 0 ? "#450a0a" : "#1e293b", border: `1px solid ${ptsDelta > 0 ? "#22c55e" : ptsDelta < 0 ? "#ef4444" : "#374151"}`, borderRadius: 6, padding: "3px 10px", textAlign: "center", fontSize: 12, fontFamily: "monospace", color: ptsDelta > 0 ? "#22c55e" : ptsDelta < 0 ? "#ef4444" : "#64748b", fontWeight: 700, flexShrink: 0, marginLeft: 10 }}>

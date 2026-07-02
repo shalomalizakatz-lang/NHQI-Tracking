@@ -291,6 +291,12 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
         </div>
       </div>
 
+      {MEASURES.some(m => m.pointsApproximate) && (
+        <div style={{ fontSize: 10, color: "#f59e0b", marginBottom: 12 }}>
+          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table (a statistical-significance adjustment we can't reproduce from published data) — treat 2025 points as directional.
+        </div>
+      )}
+
       {SECTIONS.map(sec => (
         <div key={sec.key}>
           <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", letterSpacing: "0.1em", margin: "18px 0 10px" }}>
