@@ -4,6 +4,7 @@ import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
 import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
 import { qColor, ptsColor } from "../lib/colors.js";
+import { getAutofillValue, cmsAutofillMeta } from "../lib/cmsAutofill.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
 import { downloadFacilityPdf } from "../lib/pdfExport.jsx";
@@ -13,6 +14,25 @@ const SECTIONS = [
   { key: "compliance", label: "Compliance" },
   { key: "efficiency", label: "Efficiency — PAH" },
 ];
+
+// Builds the initial vals/starVals/binaryVals for a facility, pre-filling any
+// trackable field the user hasn't entered yet with a CMS Care Compare default
+// (see src/lib/cmsAutofill.js). Fields still at their CMS default are tracked
+// in autoSet so the UI can mark them with an asterisk — editing a field removes
+// it from that set, since it's now the user's own number.
+function buildPrefill(facility, facilityId) {
+  const stored = getInputs(facilityId);
+  const storedVals = stored.vals || {};
+  const vals = { ...storedVals };
+  const autoSet = new Set();
+  for (const m of TRACKABLE_MEASURES) {
+    const hasStored = storedVals[m.id] !== undefined && storedVals[m.id] !== "";
+    if (hasStored) continue;
+    const auto = getAutofillValue(m.id, facility.medicareNumber);
+    if (auto !== null) { vals[m.id] = String(auto); autoSet.add(m.id); }
+  }
+  return { vals, starVals: stored.starVals || {}, binaryVals: stored.binaryVals || {}, autoSet };
+}
 
 export default function FacilityTracker() {
   const { facilityId } = useParams();
@@ -24,15 +44,19 @@ export default function FacilityTracker() {
   const [vals, setVals] = useState({});
   const [starVals, setStarVals] = useState({});
   const [binaryVals, setBinaryVals] = useState({});
+  const [autoFilled, setAutoFilled] = useState(new Set());
   const [saveStatus, setSaveStatus] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
-    const stored = getInputs(facilityId);
-    setVals(stored.vals || {});
-    setStarVals(stored.starVals || {});
-    setBinaryVals(stored.binaryVals || {});
+    if (!facility) return;
+    const { vals, starVals, binaryVals, autoSet } = buildPrefill(facility, facilityId);
+    setVals(vals);
+    setStarVals(starVals);
+    setBinaryVals(binaryVals);
+    setAutoFilled(autoSet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
   // Keep a ref to the latest values so the unmount-flush effect below (which
@@ -71,7 +95,10 @@ export default function FacilityTracker() {
     );
   }
 
-  const setVal = (id, v) => setVals(p => ({ ...p, [id]: v }));
+  const setVal = (id, v) => {
+    setVals(p => ({ ...p, [id]: v }));
+    setAutoFilled(p => (p.has(id) ? new Set([...p].filter(x => x !== id)) : p));
+  };
   const setStar = (id, v) => setStarVals(p => ({ ...p, [id]: v }));
   const setBinary = (id, v) => setBinaryVals(p => ({ ...p, [id]: v }));
 
@@ -86,8 +113,9 @@ export default function FacilityTracker() {
 
   function handleReset() {
     if (!window.confirm("Clear all entered current data for this facility?")) return;
-    setVals({}); setStarVals({}); setBinaryVals({});
     resetInputs(facilityId);
+    const { vals, starVals, binaryVals, autoSet } = buildPrefill(facility, facilityId);
+    setVals(vals); setStarVals(starVals); setBinaryVals(binaryVals); setAutoFilled(autoSet);
   }
 
   const TAB = active => ({
@@ -163,7 +191,7 @@ export default function FacilityTracker() {
           <DashboardTab dataset={dataset} facility={facility} summary={summary} vals={vals} starVals={starVals} binaryVals={binaryVals} qc={qc} />
         )}
         {tab === "measures" && (
-          <MeasuresTab dataset={dataset} facility={facility} vals={vals} starVals={starVals} binaryVals={binaryVals}
+          <MeasuresTab dataset={dataset} facility={facility} vals={vals} starVals={starVals} binaryVals={binaryVals} autoFilled={autoFilled}
             setVal={setVal} setStar={setStar} setBinary={setBinary} onReset={handleReset} />
         )}
         {tab === "priority" && (
@@ -275,8 +303,11 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
   );
 }
 
-function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, setStar, setBinary, onReset }) {
+function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled, setVal, setStar, setBinary, onReset }) {
   const bySection = key => MEASURES.filter(m => m.section === key);
+  const refreshedDate = cmsAutofillMeta.generatedAt
+    ? new Date(cmsAutofillMeta.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    : null;
   return (
     <div>
       <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
@@ -287,6 +318,13 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
           </button>
         </div>
       </div>
+
+      {autoFilled.size > 0 && (
+        <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 12 }}>
+          * = pre-filled from CMS Care Compare (data.cms.gov), not NY DOH's regionally-adjusted figures — verify against your own records and edit freely to override.
+          {refreshedDate && ` Last CMS pull: ${refreshedDate}.`}
+        </div>
+      )}
 
       {MEASURES.some(m => m.pointsApproximate) && (
         <div style={{ fontSize: 11, color: "#b45309", marginBottom: 12 }}>
@@ -303,7 +341,7 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             return (
               <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} cutpoints={cutpoints} year={dataset.year}
-                val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""}
+                val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""} isAutofilled={autoFilled.has(m.id)}
                 onValChange={v => setVal(m.id, v)} onStarChange={v => setStar(m.id, v)} onBinaryChange={v => setBinary(m.id, v)} />
             );
           })}

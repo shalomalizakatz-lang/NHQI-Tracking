@@ -1,7 +1,7 @@
 import { getQuintile, getPoints, getGapToNext } from "../lib/scoring.js";
 import { qColor, ptsColor, deltaColor, deltaArrow } from "../lib/colors.js";
 
-export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year }) {
+export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year, isAutofilled }) {
   if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} year={year} />;
 
   const q2025 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, val, cutpoints) : null;
@@ -41,7 +41,9 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
-            {m.short}{m.pointsApproximate && <span style={{ color: "#d97706", marginLeft: 6 }}>⚠</span>}
+            {m.short}
+            {isAutofilled && <span title="Pre-filled from CMS Care Compare — verify and edit to override" style={{ color: "#0d9488", marginLeft: 4 }}>*</span>}
+            {m.pointsApproximate && <span style={{ color: "#d97706", marginLeft: 6 }}>⚠</span>}
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{m.full}</div>
           {m.note && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{m.note}</div>}
