@@ -14,10 +14,12 @@
 // CMS source at all and stay manual.
 //
 // Staff flu vaccination ("Percentage of health care personnel who got a flu
-// shot") is NOT in the MDS Quality Measures file at all, despite Care
-// Compare's UI grouping it visually under a "Short-stay residents" heading —
-// it's healthcare-personnel-level data (originally reported to CDC's NHSN),
-// published as its own separate Provider Data Catalog dataset.
+// shot") is NOT in the MDS Quality Measures file, despite Care Compare's UI
+// grouping it visually under a "Short-stay residents" heading. It's also NOT
+// a separate top-level Provider Data Catalog dataset — a live run's keyword
+// search across every dataset title in the catalog found nothing relevant
+// (just an unrelated billing dataset and dialysis-specific ESRD data). It's
+// pulled from the Provider Info file instead, alongside hprd/turnover.
 //
 // CMS reshuffles its Provider Data Catalog dataset identifiers periodically, so
 // rather than hardcode a UUID we look datasets up by title at run time. Column
@@ -74,8 +76,25 @@ const RESIDENT_TYPE_COLUMN_CANDIDATES = ["resident type"];
 const PROVIDER_INFO_COLUMN_MATCHERS = {
   hprd: ["reported total nurse staffing hours per resident per day"],
   turnover: ["total nursing staff turnover"],
+  flu_vax_staff: ["influenza vaccine"],
 };
 const HPRD_CASE_MIX_FALLBACK_MATCH = ["case-mix", "total nurse staffing hours"];
+// A live run's broad keyword search across the ENTIRE Provider Data Catalog
+// metastore found nothing nursing-home-related for staff flu vaccination —
+// the only 2 keyword matches were an unrelated billing dataset and ESRD
+// (dialysis) data — so it's not a separate top-level dataset. Most likely
+// explanation: it's a column within "Provider Information" itself, which we
+// already download for hprd/turnover but only ever logged the first 15 of
+// its columns (the real header list is longer, since hprd/turnover both
+// matched columns beyond that sample). Try several plausible column-name
+// candidates against its full header list before giving up.
+const FLU_VAX_STAFF_FALLBACK_MATCHES = [
+  ["flu vaccine"],
+  ["health care personnel", "flu"],
+  ["healthcare personnel", "flu"],
+  ["health care personnel", "influenza"],
+  ["healthcare personnel", "influenza"],
+];
 
 const CCN_COLUMN_CANDIDATES = ["cms certification number (ccn)", "cms certification number", "ccn", "federal provider number"];
 const STATE_COLUMN_CANDIDATES = ["state", "provider state"];
@@ -132,21 +151,6 @@ function findColumn(headers, mustIncludeAll) {
   }) || null;
 }
 
-// Diagnostic-only: the four guessed titles for the healthcare-personnel flu
-// vaccination dataset all missed on the first real run, and findDataset()
-// only samples 5 arbitrary titles on a miss (not helpful for finding the
-// real one among what could be hundreds of Provider Data Catalog datasets
-// covering hospitals, dialysis, home health, etc.). This filters by keyword
-// instead of exact-title-match so the actual title shows up in the log.
-async function logTitlesContaining(keywords) {
-  const items = await fetchJson(METASTORE_URL);
-  const matches = items.filter(it => {
-    const title = (it.title || "").toLowerCase();
-    return keywords.some(k => title.includes(k));
-  });
-  log(`  Titles containing any of [${keywords.join(", ")}] (${matches.length}):`, matches.map(i => i.title));
-}
-
 async function findDataset(titleMustInclude) {
   log("Searching Provider Data Catalog metastore for:", titleMustInclude.join(" + "));
   const items = await fetchJson(METASTORE_URL);
@@ -191,7 +195,7 @@ async function main() {
   log(`Loaded ${facilitiesDataset.facilities.length} facilities from bundled dataset (${ccnsWeCareAbout.size} unique CCNs).`);
 
   const measures = {};
-  for (const id of [...Object.keys(MDS_MEASURE_MATCHERS), ...Object.keys(PROVIDER_INFO_COLUMN_MATCHERS), "flu_vax_staff"]) {
+  for (const id of [...Object.keys(MDS_MEASURE_MATCHERS), ...Object.keys(PROVIDER_INFO_COLUMN_MATCHERS)]) {
     measures[id] = {};
   }
   const stats = { matchedRows: {}, unmatchedCcnSamples: {} };
@@ -260,10 +264,16 @@ async function main() {
     if (rows.length > 0) {
       const headers = Object.keys(rows[0]);
       const ccnCol = findColumn(headers, CCN_COLUMN_CANDIDATES.map(c => c)) || findColumn(headers, ["ccn"]);
-      log(`  Columns available (sample):`, headers.slice(0, 15));
+      log(`  All columns (${headers.length}):`, headers);
       for (const [measureId, terms] of Object.entries(PROVIDER_INFO_COLUMN_MATCHERS)) {
         let col = findColumn(headers, terms);
         if (!col && measureId === "hprd") col = findColumn(headers, HPRD_CASE_MIX_FALLBACK_MATCH);
+        if (!col && measureId === "flu_vax_staff") {
+          for (const candidate of FLU_VAX_STAFF_FALLBACK_MATCHES) {
+            col = findColumn(headers, candidate);
+            if (col) break;
+          }
+        }
         if (!ccnCol || !col) {
           log(`  WARNING: could not resolve column for ${measureId} (ccnCol=${ccnCol}, col=${col}) — skipping.`);
           continue;
@@ -283,78 +293,6 @@ async function main() {
     }
   } else {
     log("WARNING: could not locate Provider Info dataset at all.");
-  }
-
-  // --- Healthcare Personnel flu vaccination (separate dataset from MDS Quality
-  // Measures — confirmed by user screenshot of Care Compare showing "Percentage
-  // of health care personnel who got a flu shot", not present in the 17 unique
-  // MDS measure descriptions logged by earlier runs). Title/shape unverified —
-  // try several plausible titles and log everything for the first real run.
-  let hcpFluDataset = await findDataset(["healthcare personnel", "vaccination"])
-    || await findDataset(["health care personnel", "vaccination"])
-    || await findDataset(["nursing home", "healthcare personnel"])
-    || await findDataset(["covid-19", "influenza", "vaccination"]);
-  if (!hcpFluDataset) {
-    await logTitlesContaining(["flu", "personnel", "vaccin", "covid", "immuniz"]);
-  }
-  if (hcpFluDataset) {
-    const rows = await loadRows(hcpFluDataset);
-    log(`  Downloaded ${rows.length} rows from "${hcpFluDataset.title}".`);
-    if (rows.length > 0) {
-      const headers = Object.keys(rows[0]);
-      log(`  All columns:`, headers);
-      const ccnCol = findColumn(headers, CCN_COLUMN_CANDIDATES) || findColumn(headers, ["ccn"]);
-      const descCol = findColumn(headers, ["measure description"]) || findColumn(headers, ["measure"]);
-      if (descCol) {
-        // Long format like MDS Quality Measures — match by description text.
-        const uniqueDescs = [...new Set(rows.map(r => r[descCol]).filter(Boolean))];
-        log(`  ${uniqueDescs.length} unique measure descriptions:`, uniqueDescs);
-        const scoreCol = headers.find(h => h.trim().toLowerCase() === "measure score")
-          || findColumn(headers, ["percentage"])
-          || findColumn(headers, ["score"]);
-        log(`  Columns resolved: ccn="${ccnCol}" description="${descCol}" score="${scoreCol}"`);
-        if (ccnCol && scoreCol) {
-          let matched = 0;
-          for (const row of rows) {
-            const desc = (row[descCol] || "").toLowerCase();
-            if (!desc.includes("health care personnel") && !desc.includes("healthcare personnel")) continue;
-            if (!desc.includes("flu") && !desc.includes("influenza")) continue;
-            const ccn = normalizeCcn(row[ccnCol]);
-            if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
-            const val = parseFloat(row[scoreCol]);
-            if (isNaN(val)) continue;
-            measures.flu_vax_staff[ccn] = round1(val);
-            matched++;
-          }
-          stats.matchedRows.flu_vax_staff = matched;
-          log(`  flu_vax_staff: matched ${matched} facility rows`);
-        }
-      } else {
-        // Wide format — one row per facility, a dedicated column for this stat.
-        const valCol = findColumn(headers, ["health care personnel", "flu"])
-          || findColumn(headers, ["healthcare personnel", "flu"])
-          || findColumn(headers, ["health care personnel", "influenza"])
-          || findColumn(headers, ["healthcare personnel", "influenza"]);
-        log(`  Columns resolved (wide format): ccn="${ccnCol}" value="${valCol}"`);
-        if (ccnCol && valCol) {
-          let matched = 0;
-          for (const row of rows) {
-            const ccn = normalizeCcn(row[ccnCol]);
-            if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
-            const val = parseFloat(row[valCol]);
-            if (isNaN(val)) continue;
-            measures.flu_vax_staff[ccn] = round1(val);
-            matched++;
-          }
-          stats.matchedRows.flu_vax_staff = matched;
-          log(`  flu_vax_staff: matched ${matched} facility rows`);
-        } else {
-          log("  WARNING: could not resolve a value column for flu_vax_staff — skipping.");
-        }
-      }
-    }
-  } else {
-    log("WARNING: could not locate a healthcare personnel flu vaccination dataset at all.");
   }
 
   const out = {
