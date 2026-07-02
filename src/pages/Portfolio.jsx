@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getPortfolio, addFacility, removeFacility, getAllInputs, ensureSeedPortfolio } from "../lib/storage.js";
-import { computeFacilitySummary } from "../lib/scoring.js";
+import { computeFacilitySummary, TRACKABLE_MAX } from "../lib/scoring.js";
 import FacilitySearch from "../components/FacilitySearch.jsx";
 import QuintileBadge from "../components/QuintileBadge.jsx";
 
@@ -10,7 +10,7 @@ const COLUMNS = [
   { key: "name", label: "Facility" },
   { key: "score2023", label: "2023 Score" },
   { key: "quintile2023", label: "2023 Quintile" },
-  { key: "score2025", label: "2025 Score" },
+  { key: "score2025", label: `2025 Score (of ${TRACKABLE_MAX})` },
   { key: "quintile2027", label: "Est. 2027 Quintile" },
   { key: "ptsDelta", label: "Pts Delta" },
 ];
@@ -114,7 +114,7 @@ export default function Portfolio() {
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-300">{r.score2023}/90</td>
                   <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2023} /></td>
-                  <td className="px-4 py-3 font-mono text-slate-300">{r.score2025 !== null ? `${r.score2025}/90` : "—"}</td>
+                  <td className="px-4 py-3 font-mono text-slate-300">{r.score2025 !== null ? `${r.score2025}/${TRACKABLE_MAX}` : "—"}</td>
                   <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2027} /></td>
                   <td className="px-4 py-3 font-mono">
                     {r.ptsDelta !== null ? (
@@ -140,7 +140,7 @@ export default function Portfolio() {
       </div>
 
       <div className="mt-4 px-4 py-2 bg-[#0a1628] border border-slate-800 rounded-md text-[11px] text-slate-500 font-mono">
-        ℹ 2023 actuals from NY DOH NHQI dataset ({dataset.year}). Est. 2027 quintile is directional — actual placement depends on that year's statewide distribution.
+        ℹ 2023 Score is out of 90. 2025 Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Est. 2027 quintile is directional — actual placement depends on that year's statewide distribution.
       </div>
     </div>
   );

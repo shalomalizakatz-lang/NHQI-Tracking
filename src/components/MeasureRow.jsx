@@ -207,7 +207,7 @@ function NotTrackableMeasureRow({ m, actual }) {
         <div style={{ background: "#0f172a", border: "1px solid #374151", borderRadius: 7, padding: "10px 12px" }}>
           <div style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace", letterSpacing: "0.1em", marginBottom: 4 }}>2025 FULL-YEAR</div>
           <div style={{ fontSize: 13, color: "#94a3b8" }}>Not self-trackable</div>
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>Carried forward from last recorded score</div>
+          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>Excluded from your 2025 projection</div>
         </div>
       </div>
 

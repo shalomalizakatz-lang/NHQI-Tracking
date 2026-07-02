@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
-import { MEASURES, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
+import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
 import { qColor, ptsColor } from "../lib/colors.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
@@ -135,9 +135,9 @@ export default function FacilityTracker() {
           {summary.score2025 !== null && (
             <>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 9, color: "#60a5fa", fontFamily: "monospace", letterSpacing: "0.1em" }}>2025 SCORE</div>
+                <div style={{ fontSize: 9, color: "#60a5fa", fontFamily: "monospace", letterSpacing: "0.1em" }}>2025 SCORE (EXCL. PAH)</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#374151" }}>/90</span></div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#374151" }}>/{TRACKABLE_MAX}</span></div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: summary.ptsDelta > 0 ? "#22c55e" : summary.ptsDelta < 0 ? "#ef4444" : "#64748b", fontFamily: "monospace" }}>
                     {summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta}
                   </div>
@@ -177,8 +177,8 @@ export default function FacilityTracker() {
             <div style={{ background: "#0c1a3a", border: "1px solid #1d4ed8", borderRadius: 7, padding: "9px 14px", marginBottom: 16, fontSize: 12, color: "#93c5fd", fontFamily: "monospace" }}>
               ▸ {dataset.year}: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> · 2025: <strong style={{ color: qc }}>{summary.score2025}/90 pts → est. Q{summary.quintile2027}</strong>
-                  <span style={{ color: summary.ptsDelta > 0 ? "#22c55e" : "#ef4444", marginLeft: 6 }}>{summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} pts from {dataset.year}</span>
+                <span> · 2025: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong>
+                  <span style={{ color: summary.ptsDelta > 0 ? "#22c55e" : "#ef4444", marginLeft: 6 }}>{summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} pts from {dataset.year} (PAH excluded from both sides)</span>
                 </span>
               )}
             </div>
@@ -198,7 +198,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
           { label: `${dataset.year} ACTUAL SCORE`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#94a3b8" },
-          { label: "2025 FULL-YEAR SCORE", val: summary.score2025 !== null ? `${summary.score2025}/90` : "—", sub: summary.entered > 0 ? `${summary.entered}/${MEASURES.length} measures entered` : "Enter current data", color: "#60a5fa" },
+          { label: "2025 SCORE (EXCL. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#60a5fa" },
           { label: "EST. 2027 QUINTILE", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive +" : "Quality Pool: negative −") : "Projected from 2025 rates", color: qc },
         ].map(c => (
           <div key={c.label} style={{ flex: "1 1 200px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 10, padding: "14px 16px" }}>
@@ -217,10 +217,11 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
           { key: "efficiency", label: "Efficiency — PAH" },
         ].map(sec => {
           const measures = bySection(sec.key);
+          const allNotTrackable = measures.every(m => m.notTrackable);
           const max = SECTION_MAX[sec.key];
           const pts23 = measures.reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0);
           const pts25 = measures.reduce((a, m) => {
-            const p = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
+            const p = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
             return a + (p ?? 0);
           }, 0);
           const pct23 = (pts23 / max) * 100;
@@ -231,12 +232,16 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
                 <span style={{ color: "#94a3b8" }}>{sec.label}</span>
                 <span style={{ fontFamily: "monospace" }}>
                   <span style={{ color: "#64748b" }}>{dataset.year}: {pts23}/{max}</span>
-                  {summary.entered > 0 && <span style={{ color: "#60a5fa", marginLeft: 12 }}>2025: {pts25}/{max}</span>}
+                  {allNotTrackable ? (
+                    <span style={{ color: "#f59e0b", marginLeft: 12 }}>excluded from 2025 projection</span>
+                  ) : (
+                    summary.entered > 0 && <span style={{ color: "#60a5fa", marginLeft: 12 }}>2025: {pts25}/{max}</span>
+                  )}
                 </span>
               </div>
               <div style={{ position: "relative", background: "#1e293b", borderRadius: 3, height: 8 }}>
                 <div style={{ position: "absolute", left: 0, top: 0, width: `${pct23}%`, height: "100%", background: "#475569", borderRadius: 3 }} />
-                {summary.entered > 0 && <div style={{ position: "absolute", left: 0, top: 0, width: `${pct25}%`, height: "100%", background: "#3b82f6", borderRadius: 3, opacity: 0.8 }} />}
+                {!allNotTrackable && summary.entered > 0 && <div style={{ position: "absolute", left: 0, top: 0, width: `${pct25}%`, height: "100%", background: "#3b82f6", borderRadius: 3, opacity: 0.8 }} />}
               </div>
             </div>
           );
@@ -249,7 +254,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
           {MEASURES.map(m => {
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
-            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
+            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
             const a = facility.actuals[m.id] || { quintile: null, points: 0 };
             const aQ = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
             const moved = typeof aQ === "number" && !isNaN(aQ) && q25 !== null && q25 !== aQ;
@@ -263,7 +268,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
                 </div>
                 <div style={{ fontSize: 10, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: "#475569" }}>
                   <span style={{ color: "#64748b" }}>{a.points ?? 0}</span>
-                  {pts25 !== null && <span style={{ color: "#60a5fa" }}> → {pts25}</span>}
+                  {m.notTrackable ? <span style={{ color: "#f59e0b" }}> (n/a)</span> : pts25 !== null && <span style={{ color: "#60a5fa" }}> → {pts25}</span>}
                 </div>
               </div>
             );
@@ -272,7 +277,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "9px 12px", background: "#0a1628", border: "1px solid #1e293b", borderRadius: 6, fontSize: 10, color: "#475569", fontFamily: "monospace" }}>
-        ℹ {dataset.year} actuals pulled directly from NY DOH NHQI dataset for {facility.name} (Facility ID {facility.id}). 2025 full-year values are internal tracking numbers. Cut points from the {dataset.year} NY DOH dataset, regionally adjusted where applicable ({facility.region}) — actual future quintile placement depends on that year's statewide distribution. PAH cannot be self-tracked; it requires DOH's MDS→SPARCS match, so treat that measure's 2025 entry as an estimate only.
+        ℹ {dataset.year} actuals pulled directly from NY DOH NHQI dataset for {facility.name} (Facility ID {facility.id}). 2025 full-year values are internal tracking numbers. Cut points from the {dataset.year} NY DOH dataset, regionally adjusted where applicable ({facility.region}) — actual future quintile placement depends on that year's statewide distribution. PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded from the 2025 projection entirely rather than guessed at — the 2025 score and quintile estimate above are out of {TRACKABLE_MAX} points, not 90. DOH's real cycle will still include PAH once calculated.
       </div>
     </div>
   );
