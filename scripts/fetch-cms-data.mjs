@@ -6,20 +6,23 @@
 // Only pulls the measures that have a real 1:1 CMS source and aren't NY-specific
 // adjustments: pressure ulcers (high-risk), weight loss, falls w/ major injury,
 // depressive symptoms, ADL increase, UTI, incontinence (low-risk), pneumococcal
-// vaccine, resident flu vaccine, staff flu vaccine, staffing hours/resident/day,
-// and nursing staff turnover. Health Inspection Stars is deliberately excluded
-// — Care Compare's star rating is the national one, not NY DOH's regionally-
-// adjusted version NHQI actually uses, so pulling it would silently show the
-// wrong figure. Contract staff % and flu data submission timeliness have no
-// CMS source at all and stay manual.
+// vaccine, resident flu vaccine, staffing hours/resident/day, and nursing staff
+// turnover. Health Inspection Stars is deliberately excluded — Care Compare's
+// star rating is the national one, not NY DOH's regionally-adjusted version
+// NHQI actually uses, so pulling it would silently show the wrong figure.
+// Contract staff %, staff flu vaccination, and flu data submission timeliness
+// have no accessible CMS source and stay manual.
 //
 // Staff flu vaccination ("Percentage of health care personnel who got a flu
-// shot") is NOT in the MDS Quality Measures file, despite Care Compare's UI
-// grouping it visually under a "Short-stay residents" heading. It's also NOT
-// a separate top-level Provider Data Catalog dataset — a live run's keyword
-// search across every dataset title in the catalog found nothing relevant
-// (just an unrelated billing dataset and dialysis-specific ESRD data). It's
-// pulled from the Provider Info file instead, alongside hprd/turnover.
+// shot") IS real CMS data, visible on Care Compare's own site, but after three
+// verified live runs it isn't reachable through the Provider Data Catalog API:
+// not in the MDS Quality Measures file (not among its 17 unique measure
+// descriptions), not a standalone dataset (a full-catalog keyword search for
+// "flu"/"personnel"/"vaccin"/"covid"/"immuniz" found nothing relevant), and
+// not a column in Provider Information (checked all 99 of its columns). Care
+// Compare's website most likely renders it from an internal system (possibly
+// a direct CDC NHSN integration) that isn't published as open data. Left
+// manual rather than built on an undocumented/fragile scrape of the site.
 //
 // CMS reshuffles its Provider Data Catalog dataset identifiers periodically, so
 // rather than hardcode a UUID we look datasets up by title at run time. Column
@@ -76,25 +79,8 @@ const RESIDENT_TYPE_COLUMN_CANDIDATES = ["resident type"];
 const PROVIDER_INFO_COLUMN_MATCHERS = {
   hprd: ["reported total nurse staffing hours per resident per day"],
   turnover: ["total nursing staff turnover"],
-  flu_vax_staff: ["influenza vaccine"],
 };
 const HPRD_CASE_MIX_FALLBACK_MATCH = ["case-mix", "total nurse staffing hours"];
-// A live run's broad keyword search across the ENTIRE Provider Data Catalog
-// metastore found nothing nursing-home-related for staff flu vaccination —
-// the only 2 keyword matches were an unrelated billing dataset and ESRD
-// (dialysis) data — so it's not a separate top-level dataset. Most likely
-// explanation: it's a column within "Provider Information" itself, which we
-// already download for hprd/turnover but only ever logged the first 15 of
-// its columns (the real header list is longer, since hprd/turnover both
-// matched columns beyond that sample). Try several plausible column-name
-// candidates against its full header list before giving up.
-const FLU_VAX_STAFF_FALLBACK_MATCHES = [
-  ["flu vaccine"],
-  ["health care personnel", "flu"],
-  ["healthcare personnel", "flu"],
-  ["health care personnel", "influenza"],
-  ["healthcare personnel", "influenza"],
-];
 
 const CCN_COLUMN_CANDIDATES = ["cms certification number (ccn)", "cms certification number", "ccn", "federal provider number"];
 const STATE_COLUMN_CANDIDATES = ["state", "provider state"];
@@ -268,12 +254,6 @@ async function main() {
       for (const [measureId, terms] of Object.entries(PROVIDER_INFO_COLUMN_MATCHERS)) {
         let col = findColumn(headers, terms);
         if (!col && measureId === "hprd") col = findColumn(headers, HPRD_CASE_MIX_FALLBACK_MATCH);
-        if (!col && measureId === "flu_vax_staff") {
-          for (const candidate of FLU_VAX_STAFF_FALLBACK_MATCHES) {
-            col = findColumn(headers, candidate);
-            if (col) break;
-          }
-        }
         if (!ccnCol || !col) {
           log(`  WARNING: could not resolve column for ${measureId} (ccnCol=${ccnCol}, col=${col}) — skipping.`);
           continue;
