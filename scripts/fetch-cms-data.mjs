@@ -149,6 +149,13 @@ function normalizeCcn(v) {
   return String(v).trim().toUpperCase();
 }
 
+// CMS sometimes reports more precision than is meaningful for a manual-entry
+// default (e.g. 3.567) — cap to one decimal place to match how facilities
+// actually enter their own numbers.
+function round1(v) {
+  return Math.round(v * 10) / 10;
+}
+
 async function main() {
   const facilitiesDataset = JSON.parse(await readFile(FACILITIES_PATH, "utf8"));
   const ccnsWeCareAbout = new Set(facilitiesDataset.facilities.map(f => normalizeCcn(f.medicareNumber)).filter(Boolean));
@@ -202,7 +209,7 @@ async function main() {
             if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
             const val = parseFloat(row[scoreCol]);
             if (isNaN(val)) continue;
-            measures[measureId][ccn] = val;
+            measures[measureId][ccn] = round1(val);
             matched++;
           }
           stats.matchedRows[measureId] = matched;
@@ -238,7 +245,7 @@ async function main() {
           if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
           const val = parseFloat(row[col]);
           if (isNaN(val)) continue;
-          measures[measureId][ccn] = val;
+          measures[measureId][ccn] = round1(val);
           matched++;
         }
         stats.matchedRows[measureId] = matched;
