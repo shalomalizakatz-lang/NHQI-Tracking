@@ -63,11 +63,19 @@ const MDS_MEASURE_MATCHERS = {
 const RESIDENT_TYPE_COLUMN_CANDIDATES = ["resident type"];
 
 // measureId -> matcher against Provider Info column headers.
+// hprd deliberately targets the "Reported" (self-reported PBJ) figure, not
+// CMS's "Case-Mix" column — Care Compare's own consumer-facing page displays
+// the reported figure, and a user comparing our auto-fill against that page
+// saw a mismatch (4.2 vs. the 3.2 Care Compare showed) because the case-mix
+// column was being matched first. CMS's national case-mix adjustment isn't
+// guaranteed to equal NY DOH's own case-mix methodology anyway, so "reported"
+// is no less approximate and has the advantage of being directly verifiable
+// against what Care Compare itself shows.
 const PROVIDER_INFO_COLUMN_MATCHERS = {
-  hprd: ["case-mix", "total nurse staffing hours"],
+  hprd: ["reported total nurse staffing hours per resident per day"],
   turnover: ["total nursing staff turnover"],
 };
-const HPRD_FALLBACK_MATCH = ["reported total nurse staffing hours per resident per day"];
+const HPRD_CASE_MIX_FALLBACK_MATCH = ["case-mix", "total nurse staffing hours"];
 
 const CCN_COLUMN_CANDIDATES = ["cms certification number (ccn)", "cms certification number", "ccn", "federal provider number"];
 const STATE_COLUMN_CANDIDATES = ["state", "provider state"];
@@ -240,7 +248,7 @@ async function main() {
       log(`  Columns available (sample):`, headers.slice(0, 15));
       for (const [measureId, terms] of Object.entries(PROVIDER_INFO_COLUMN_MATCHERS)) {
         let col = findColumn(headers, terms);
-        if (!col && measureId === "hprd") col = findColumn(headers, HPRD_FALLBACK_MATCH);
+        if (!col && measureId === "hprd") col = findColumn(headers, HPRD_CASE_MIX_FALLBACK_MATCH);
         if (!ccnCol || !col) {
           log(`  WARNING: could not resolve column for ${measureId} (ccnCol=${ccnCol}, col=${col}) — skipping.`);
           continue;
