@@ -32,14 +32,19 @@ const METASTORE_URL = "https://data.cms.gov/provider-data/api/1/metastore/schema
 
 // measureId -> matcher against the MDS Quality Measures "Measure Description" column.
 // Each matcher is a list of substrings that must ALL appear (case-insensitive).
+// Confirmed against the real "Measure Description" values logged by the second
+// live run (see PR #9) — CMS's public description text for both of these omits
+// the high-risk/low-risk cohort qualifier entirely even though the underlying
+// measure spec risk-adjusts to that cohort, so requiring "high"/"low" in the
+// text (as the first two attempts did) matched nothing.
 const MDS_MEASURE_MATCHERS = {
-  pressure_ulcer: ["pressure ulcer", "high"],
+  pressure_ulcer: ["pressure ulcer"],
   weight_loss: ["lose too much weight"],
   falls: ["falls", "major injury"],
   depression: ["depressive symptoms"],
   adl: ["help with daily activities", "increased"],
   uti: ["urinary tract infection"],
-  incontinence: ["bowel", "bladder", "low"],
+  incontinence: ["bowel", "bladder"],
   pneumo_vax: ["pneumococcal vaccine"],
   flu_vax_resident: ["influenza vaccine"],
 };
