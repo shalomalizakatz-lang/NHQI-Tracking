@@ -36,21 +36,21 @@ export default function Settings() {
 
   return (
     <div className="px-6 py-6 max-w-3xl mx-auto space-y-6">
-      <div className="bg-[#0a1628] border border-slate-800 rounded-lg p-5">
-        <div className="text-[10px] text-slate-500 font-mono tracking-widest mb-2">ACTIVE DATASET</div>
-        <div className="text-sm text-slate-200">
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="text-sm font-semibold text-slate-900 mb-2">Active dataset</div>
+        <div className="text-sm text-slate-500">
           {dataset.year} — {dataset.facilities.length} facilities · {dataset.source}
         </div>
         {hasCustomDataset() && (
-          <button onClick={handleRevert} className="mt-3 text-xs text-slate-400 hover:text-red-400 underline">
+          <button onClick={handleRevert} className="mt-3 text-xs text-slate-400 hover:text-red-600 underline">
             Revert to bundled 2023 dataset
           </button>
         )}
       </div>
 
-      <div className="bg-[#0a1628] border border-slate-800 rounded-lg p-5">
-        <div className="text-[10px] text-slate-500 font-mono tracking-widest mb-2">REFRESH CUT POINTS</div>
-        <p className="text-sm text-slate-400 mb-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="text-sm font-semibold text-slate-900 mb-2">Refresh cut points</div>
+        <p className="text-sm text-slate-500 mb-4 leading-relaxed">
           DOH recalculates NHQI cut points annually. Upload a new export in the same long-format CSV structure
           (one row per facility × measure, with First–Fifth Quintile columns) to refresh the benchmarks used
           across the portfolio. Facilities are matched by DOH Facility ID; your tracked portfolio and entered
@@ -62,20 +62,20 @@ export default function Settings() {
           accept=".csv,text/csv"
           onChange={handleFile}
           disabled={busy}
-          className="text-sm text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:text-sm hover:file:bg-blue-500 file:cursor-pointer"
+          className="text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-teal-600 file:text-white file:text-sm hover:file:bg-teal-700 file:cursor-pointer"
         />
-        {busy && <div className="mt-2 text-xs text-amber-400">Parsing…</div>}
+        {busy && <div className="mt-2 text-xs text-amber-600">Parsing…</div>}
         {status && (
-          <div className={`mt-3 text-xs px-3 py-2 rounded-md border ${status.type === "success" ? "border-green-800 bg-green-950 text-green-300" : "border-red-800 bg-red-950 text-red-300"}`}>
+          <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${status.type === "success" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
             {status.msg}
           </div>
         )}
       </div>
 
-      <div className="bg-[#0a1628] border border-slate-800 rounded-lg p-5 text-xs text-slate-500 font-mono leading-relaxed">
-        ℹ PAH (Potentially Avoidable Hospitalizations) cannot be self-tracked in real time — it requires DOH's
-        MDS→SPARCS claims match, which is only available once DOH publishes the next NHQI dataset. Treat any
-        entered PAH value as a directional estimate.
+      <div className="bg-stone-100 border border-stone-200 rounded-xl p-5 text-xs text-slate-500 leading-relaxed">
+        PAH (Potentially Avoidable Hospitalizations) can't be self-tracked in real time — it requires DOH's
+        MDS→SPARCS claims match, which is only available once DOH publishes the next NHQI dataset. It's excluded
+        entirely from every facility's 2025 projection rather than estimated.
       </div>
     </div>
   );

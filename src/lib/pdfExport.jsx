@@ -1,5 +1,5 @@
 import { Document, Page, View, Text, StyleSheet, pdf } from "@react-pdf/renderer";
-import { MEASURES, getCutpoints, getQuintile, getGapToNext, getDisplayed2025Points } from "./scoring.js";
+import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, getCutpoints, getQuintile, getGapToNext, getDisplayed2025Points } from "./scoring.js";
 
 const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111827" },
@@ -60,15 +60,15 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             <Text style={{ fontSize: 7, color: "#6b7280" }}>Quintile {summary.quintile2023 ?? "—"}</Text>
           </View>
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreLabel}>2025 Full-Year Score</Text>
-            <Text style={styles.scoreVal}>{summary.score2025 !== null ? `${summary.score2025}/90` : "—"}</Text>
-            <Text style={{ fontSize: 7, color: "#6b7280" }}>{summary.entered}/{MEASURES.length} measures entered</Text>
+            <Text style={styles.scoreLabel}>2025 Score (excl. PAH)</Text>
+            <Text style={styles.scoreVal}>{summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—"}</Text>
+            <Text style={{ fontSize: 7, color: "#6b7280" }}>{summary.entered}/{TRACKABLE_MEASURES.length} trackable measures entered</Text>
           </View>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Est. 2027 Quintile</Text>
             <Text style={styles.scoreVal}>{summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—"}</Text>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>
-              {summary.ptsDelta !== null ? `${summary.ptsDelta > 0 ? "+" : ""}${summary.ptsDelta} pts vs ${dataset.year}` : "Enter 2025 data to project"}
+              {summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Enter 2025 data to project"}
             </Text>
           </View>
         </View>
@@ -87,7 +87,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             const a = facility.actuals[m.id] || {};
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
-            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
+            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
             const val2025Display = m.notTrackable ? "not trackable" : (vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—");
             return (
               <View key={m.id} style={styles.tRow}>
@@ -115,7 +115,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — its last recorded score is carried forward into the 2025 projection as a placeholder. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the 2025 Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>
