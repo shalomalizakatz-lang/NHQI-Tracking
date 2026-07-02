@@ -85,7 +85,7 @@ export default function FacilityTracker() {
   }
 
   function handleReset() {
-    if (!window.confirm("Clear all entered 2025 data for this facility?")) return;
+    if (!window.confirm("Clear all entered current data for this facility?")) return;
     setVals({}); setStarVals({}); setBinaryVals({});
     resetInputs(facilityId);
   }
@@ -120,7 +120,7 @@ export default function FacilityTracker() {
               </div>
             )}
             <div style={{ fontSize: 11, color: "#94a3b8" }}>
-              {dataset.year} Actual vs. 2025 Full-Year · {facility.city}, {facility.county}
+              {dataset.year} Actual vs. Current Full-Year · {facility.city}, {facility.county}
             </div>
             {saveStatus === "saving" && <div style={{ fontSize: 10, color: "#d97706", marginTop: 2 }}>● Saving…</div>}
             {saveStatus === "saved" && <div style={{ fontSize: 10, color: "#16a34a", marginTop: 2 }}>✓ Saved</div>}
@@ -134,11 +134,11 @@ export default function FacilityTracker() {
           {summary.score2025 !== null && (
             <>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: "#0d9488" }}>2025 Score (excl. PAH)</div>
+                <div style={{ fontSize: 10, color: "#0d9488" }}>Current Score (excl. PAH)</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: "#0d9488" }}>Est. 2027 Quintile</div>
+                <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
               </div>
             </>
@@ -154,8 +154,8 @@ export default function FacilityTracker() {
 
       <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", padding: "0 22px", display: "flex", gap: 2 }}>
         <button style={TAB(tab === "dashboard")} onClick={() => setTab("dashboard")}>Dashboard</button>
-        <button style={TAB(tab === "measures")} onClick={() => setTab("measures")}>Enter 2025 Numbers</button>
-        <button style={TAB(tab === "priority")} onClick={() => setTab("priority")}>2027 Prediction</button>
+        <button style={TAB(tab === "measures")} onClick={() => setTab("measures")}>Enter Current Numbers</button>
+        <button style={TAB(tab === "priority")} onClick={() => setTab("priority")}>Est. Results</button>
       </div>
 
       <div style={{ padding: "20px 22px", maxWidth: 820, margin: "0 auto" }}>
@@ -171,7 +171,7 @@ export default function FacilityTracker() {
             <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
               {dataset.year}: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; 2025: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; Current: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
             </div>
             <PriorityList dataset={dataset} facility={facility} vals={vals} />
@@ -190,8 +190,8 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
           { label: `${dataset.year} Actual Score`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#475569" },
-          { label: "2025 Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
-          { label: "Est. 2027 Quintile", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from 2025 rates", color: qc },
+          { label: "Current Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
+          { label: "Est. Quintile", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
         ].map(c => (
           <div key={c.label} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
@@ -225,9 +225,9 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
                 <span style={{ fontFamily: "monospace" }}>
                   <span style={{ color: "#94a3b8" }}>{dataset.year}: {pts23}/{max}</span>
                   {allNotTrackable ? (
-                    <span style={{ color: "#d97706", marginLeft: 12, fontFamily: "inherit" }}>excluded from 2025 projection</span>
+                    <span style={{ color: "#d97706", marginLeft: 12, fontFamily: "inherit" }}>excluded from current projection</span>
                   ) : (
-                    summary.entered > 0 && <span style={{ color: "#0d9488", marginLeft: 12 }}>2025: {pts25}/{max}</span>
+                    summary.entered > 0 && <span style={{ color: "#0d9488", marginLeft: 12 }}>Current: {pts25}/{max}</span>
                   )}
                 </span>
               </div>
@@ -242,7 +242,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
 
       <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 10 }}>All measures at a glance</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "2px 16px" }}>
           {MEASURES.map(m => {
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
@@ -269,7 +269,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. 2025 values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the 2025 score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. Est. 2027 quintile is directional, not guaranteed.
+        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. Est. results are directional, not guaranteed.
       </div>
     </div>
   );
@@ -281,7 +281,7 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
     <div>
       <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Enter this facility's 2025 full-year numbers to project its 2027 NHQI payment, compared against {dataset.year} actuals.</span>
+          <span>Enter this facility's current full-year numbers to project its NHQI payment, compared against {dataset.year} actuals.</span>
           <button onClick={onReset} style={{ background: "#fff", border: "1px solid #99f6e4", borderRadius: 6, color: "#0d9488", fontSize: 11, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
             Reset
           </button>
@@ -290,7 +290,7 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
 
       {MEASURES.some(m => m.pointsApproximate) && (
         <div style={{ fontSize: 11, color: "#b45309", marginBottom: 12 }}>
-          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table — treat 2025 points as directional.
+          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table — treat current points as directional.
         </div>
       )}
 
@@ -302,7 +302,7 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, setVal, se
           {bySection(sec.key).map(m => {
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             return (
-              <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} cutpoints={cutpoints}
+              <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} cutpoints={cutpoints} year={dataset.year}
                 val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""}
                 onValChange={v => setVal(m.id, v)} onStarChange={v => setStar(m.id, v)} onBinaryChange={v => setBinary(m.id, v)} />
             );

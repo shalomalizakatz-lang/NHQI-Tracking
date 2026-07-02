@@ -1,8 +1,8 @@
 import { getQuintile, getPoints, getGapToNext } from "../lib/scoring.js";
 import { qColor, ptsColor, deltaColor, deltaArrow } from "../lib/colors.js";
 
-export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange }) {
-  if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} />;
+export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year }) {
+  if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} year={year} />;
 
   const q2025 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, val, cutpoints) : null;
   const pts2025 = getPoints(m, val, starVal, binaryVal, cutpoints);
@@ -56,7 +56,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
       <div style={{ display: "grid", gridTemplateColumns: "1fr 32px 1fr", gap: 8, marginBottom: 12, alignItems: "center" }}>
 
         <div style={{ background: "#fafaf9", borderRadius: 8, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>2023 ACTUAL</div>
+          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>{year} ACTUAL</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>
             {typeof a.value === "number" ? `${a.value}` : (a.value ?? "—")}
             <span style={{ fontSize: 11, color: "#94a3b8" }}>{m.unit}</span>
@@ -81,7 +81,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
         </div>
 
         <div style={{ background: "#f0fdfa", borderRadius: 8, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, color: "#0d9488", letterSpacing: "0.03em", marginBottom: 4 }}>2025 FULL-YEAR</div>
+          <div style={{ fontSize: 10, color: "#0d9488", letterSpacing: "0.03em", marginBottom: 4 }}>CURRENT FULL-YEAR</div>
 
           {(m.scoring === "quintile" || m.scoring === "quintile_pah" || m.scoring === "threshold") && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -138,7 +138,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
             return (
               <div key={qi} style={{ padding: "2px 7px", borderRadius: 99, fontSize: 10, background: isActive2025 ? c + "1c" : "#fafaf9", border: `1px solid ${isActive2025 ? c + "60" : "#f0efed"}`, color: isActive2025 ? c : "#94a3b8", fontWeight: isActive2025 ? 600 : 400 }}>
                 Q{qi}: {label}{m.unit === "/10k days" || m.unit === "hrs" ? ` ${m.unit}` : "%"}
-                {isActive2023 && !isActive2025 && <span style={{ marginLeft: 3, opacity: 0.7 }}>·23</span>}
+                {isActive2023 && !isActive2025 && <span style={{ marginLeft: 3, opacity: 0.7 }}>·{String(year).slice(-2)}</span>}
               </div>
             );
           })}
@@ -173,7 +173,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
   );
 }
 
-function NotTrackableMeasureRow({ m, actual }) {
+function NotTrackableMeasureRow({ m, actual, year }) {
   const a = actual || { value: null, quintile: null, points: 0 };
   const aQuintileNum = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
   const qc2023 = qColor(typeof aQuintileNum === "number" && !isNaN(aQuintileNum) ? aQuintileNum : null);
@@ -204,9 +204,9 @@ function NotTrackableMeasureRow({ m, actual }) {
         <div style={{ textAlign: "center", fontSize: 15, color: "#cbd5e1" }}>→</div>
 
         <div style={{ background: "#fafaf9", borderRadius: 8, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>2025 FULL-YEAR</div>
+          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>CURRENT FULL-YEAR</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>Not self-trackable</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Excluded from your 2025 projection</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Excluded from your current projection</div>
         </div>
       </div>
 

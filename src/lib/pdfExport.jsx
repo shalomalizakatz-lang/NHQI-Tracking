@@ -50,7 +50,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         <View style={styles.headerBar} />
         <Text style={styles.title}>{displayName}</Text>
         <Text style={styles.subtitle}>
-          NY DOH NHQI · {dataset.year} Actual vs. 2025 Full-Year · {facility.city}, {facility.county} ({facility.region}) · OPCERT {facility.opcert}
+          NY DOH NHQI · {dataset.year} Actual vs. Current Full-Year · {facility.city}, {facility.county} ({facility.region}) · OPCERT {facility.opcert}
         </Text>
 
         <View style={styles.scoreRow}>
@@ -60,28 +60,28 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             <Text style={{ fontSize: 7, color: "#6b7280" }}>Quintile {summary.quintile2023 ?? "—"}</Text>
           </View>
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreLabel}>2025 Score (excl. PAH)</Text>
+            <Text style={styles.scoreLabel}>Current Score (excl. PAH)</Text>
             <Text style={styles.scoreVal}>{summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—"}</Text>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>{summary.entered}/{TRACKABLE_MEASURES.length} trackable measures entered</Text>
           </View>
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreLabel}>Est. 2027 Quintile</Text>
+            <Text style={styles.scoreLabel}>Est. Quintile</Text>
             <Text style={styles.scoreVal}>{summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—"}</Text>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>
-              {summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Enter 2025 data to project"}
+              {summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Enter current data to project"}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>All Measures — {dataset.year} Actual vs. 2025 Full-Year</Text>
+        <Text style={styles.sectionTitle}>All Measures — {dataset.year} Actual vs. Current Full-Year</Text>
         <View style={styles.table}>
           <View style={styles.tHeadRow}>
             <Text style={[styles.th, styles.colMeasure]}>Measure</Text>
             <Text style={[styles.th, styles.colVal]}>{dataset.year}</Text>
             <Text style={[styles.th, styles.colQ]}>Q</Text>
-            <Text style={[styles.th, styles.colVal]}>2025</Text>
+            <Text style={[styles.th, styles.colVal]}>Current</Text>
             <Text style={[styles.th, styles.colQ]}>Q</Text>
-            <Text style={[styles.th, styles.colPts]}>Pts (yr/'25)</Text>
+            <Text style={[styles.th, styles.colPts]}>Pts (yr/cur)</Text>
           </View>
           {MEASURES.map(m => {
             const a = facility.actuals[m.id] || {};
@@ -104,7 +104,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
 
         <Text style={styles.sectionTitle}>Top Improvement Opportunities</Text>
         {priorities.length === 0 ? (
-          <Text style={{ fontSize: 8, color: "#6b7280" }}>Enter 2025 full-year numbers to generate an improvement plan.</Text>
+          <Text style={{ fontSize: 8, color: "#6b7280" }}>Enter current full-year numbers to generate an improvement plan.</Text>
         ) : (
           priorities.map((x, i) => (
             <View key={x.m.id} style={styles.priorityRow}>
@@ -115,7 +115,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the 2025 Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>

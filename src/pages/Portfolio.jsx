@@ -6,18 +6,17 @@ import { computeFacilitySummary, TRACKABLE_MAX } from "../lib/scoring.js";
 import FacilitySearch from "../components/FacilitySearch.jsx";
 import QuintileBadge from "../components/QuintileBadge.jsx";
 
-const COLUMNS = [
-  { key: "name", label: "Facility" },
-  { key: "score2023", label: "2023 Score" },
-  { key: "quintile2023", label: "2023 Quintile" },
-  { key: "score2025", label: `2025 Score (of ${TRACKABLE_MAX})` },
-  { key: "quintile2027", label: "Est. 2027 Quintile" },
-  { key: "ptsDelta", label: "Pts Delta" },
-];
-
 export default function Portfolio() {
   const navigate = useNavigate();
   const [dataset] = useState(() => loadActiveDataset());
+  const columns = useMemo(() => [
+    { key: "name", label: "Facility" },
+    { key: "score2023", label: `${dataset.year} Score` },
+    { key: "quintile2023", label: `${dataset.year} Quintile` },
+    { key: "score2025", label: `Current Score (of ${TRACKABLE_MAX})` },
+    { key: "quintile2027", label: "Est. Quintile" },
+    { key: "ptsDelta", label: "Pts Delta" },
+  ], [dataset.year]);
   const [portfolio, setPortfolio] = useState(() => { ensureSeedPortfolio(); return getPortfolio(); });
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
@@ -65,7 +64,7 @@ export default function Portfolio() {
   }
 
   function handleRemove(facilityId) {
-    if (!window.confirm("Remove this facility from your tracked portfolio? Its entered 2025 data will be deleted.")) return;
+    if (!window.confirm("Remove this facility from your tracked portfolio? Its entered current data will be deleted.")) return;
     removeFacility(facilityId);
     setPortfolio(getPortfolio());
   }
@@ -89,7 +88,7 @@ export default function Portfolio() {
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left">
-                {COLUMNS.map(c => (
+                {columns.map(c => (
                   <th
                     key={c.key}
                     onClick={() => toggleSort(c.key)}
@@ -140,7 +139,7 @@ export default function Portfolio() {
       </div>
 
       <div className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed">
-        2023 Score is out of 90. 2025 Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Est. 2027 quintile is directional — actual placement depends on that year's statewide distribution.
+        {dataset.year} Score is out of 90. Current Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Est. quintile is directional — actual placement depends on that year's statewide distribution.
       </div>
     </div>
   );

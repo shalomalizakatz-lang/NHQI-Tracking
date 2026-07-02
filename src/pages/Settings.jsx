@@ -18,7 +18,7 @@ export default function Settings() {
       const parsed = parseNhqiCsv(text);
       saveCustomDataset(parsed);
       setDataset(parsed);
-      setStatus({ type: "success", msg: `Loaded ${parsed.facilities.length} facilities for ${parsed.year} — cut points updated. Existing 2025 inputs are unaffected.` });
+      setStatus({ type: "success", msg: `Loaded ${parsed.facilities.length} facilities for ${parsed.year} — cut points updated. Existing current-year inputs are unaffected.` });
     } catch (err) {
       setStatus({ type: "error", msg: err.message || "Could not parse that file." });
     } finally {
@@ -54,7 +54,7 @@ export default function Settings() {
           DOH recalculates NHQI cut points annually. Upload a new export in the same long-format CSV structure
           (one row per facility × measure, with First–Fifth Quintile columns) to refresh the benchmarks used
           across the portfolio. Facilities are matched by DOH Facility ID; your tracked portfolio and entered
-          2025 numbers are preserved.
+          current numbers are preserved.
         </p>
         <input
           ref={fileRef}
@@ -75,7 +75,7 @@ export default function Settings() {
       <div className="bg-stone-100 border border-stone-200 rounded-xl p-5 text-xs text-slate-500 leading-relaxed">
         PAH (Potentially Avoidable Hospitalizations) can't be self-tracked in real time — it requires DOH's
         MDS→SPARCS claims match, which is only available once DOH publishes the next NHQI dataset. It's excluded
-        entirely from every facility's 2025 projection rather than estimated.
+        entirely from every facility's current projection rather than estimated.
       </div>
     </div>
   );
