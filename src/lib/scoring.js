@@ -120,7 +120,7 @@ export const MEASURES = [
     unit: "/10k days", higherIsBetter: false, scoring: "quintile_pah", maxPts: 10, section: "efficiency",
     note: "Q1=10 · Q2=8 · Q3=6 · Q4=2 · Q5=0",
     notTrackable: true,
-    notTrackableNote: "Cannot be self-tracked — requires DOH's MDS→SPARCS claims match, which is only available when DOH publishes the next NHQI cycle. Rather than guess, it's excluded entirely from your 2025 projection (scored out of 80, not 90) — the facility's last recorded score is shown here for reference only. DOH's real cycle will still include PAH once calculated.",
+    notTrackableNote: "Cannot be self-tracked — requires DOH's MDS→SPARCS claims match, which is only available when DOH publishes the next NHQI cycle. Rather than guess, it's excluded entirely from your current projection (scored out of 80, not 90) — the facility's last recorded score is shown here for reference only. DOH's real cycle will still include PAH once calculated.",
   },
 ];
 

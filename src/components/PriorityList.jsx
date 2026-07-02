@@ -19,7 +19,7 @@ export default function PriorityList({ dataset, facility, vals }) {
 
   if (items.length === 0) return (
     <div style={{ color: "#94a3b8", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
-      Enter this facility's 2025 full-year numbers in "Enter 2025 Numbers" to generate its improvement plan.
+      Enter this facility's current full-year numbers in "Enter Current Numbers" to generate its improvement plan.
     </div>
   );
 
