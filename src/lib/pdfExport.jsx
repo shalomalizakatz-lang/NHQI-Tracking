@@ -68,7 +68,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             <Text style={styles.scoreLabel}>Est. 2027 Quintile</Text>
             <Text style={styles.scoreVal}>{summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—"}</Text>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>
-              {summary.ptsDelta !== null ? `${summary.ptsDelta > 0 ? "+" : ""}${summary.ptsDelta} pts vs ${dataset.year}` : "Enter 2025 data to project"}
+              {summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Enter 2025 data to project"}
             </Text>
           </View>
         </View>
