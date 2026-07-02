@@ -6,12 +6,18 @@
 // Only pulls the measures that have a real 1:1 CMS source and aren't NY-specific
 // adjustments: pressure ulcers (high-risk), weight loss, falls w/ major injury,
 // depressive symptoms, ADL increase, UTI, incontinence (low-risk), pneumococcal
-// vaccine, resident flu vaccine, staffing hours/resident/day, and nursing staff
-// turnover. Health Inspection Stars is deliberately excluded — Care Compare's
-// star rating is the national one, not NY DOH's regionally-adjusted version NHQI
-// actually uses, so pulling it would silently show the wrong figure. Contract
-// staff %, staff flu vaccination, and flu data submission timeliness have no
+// vaccine, resident flu vaccine, staff flu vaccine, staffing hours/resident/day,
+// and nursing staff turnover. Health Inspection Stars is deliberately excluded
+// — Care Compare's star rating is the national one, not NY DOH's regionally-
+// adjusted version NHQI actually uses, so pulling it would silently show the
+// wrong figure. Contract staff % and flu data submission timeliness have no
 // CMS source at all and stay manual.
+//
+// Staff flu vaccination ("Percentage of health care personnel who got a flu
+// shot") is NOT in the MDS Quality Measures file at all, despite Care
+// Compare's UI grouping it visually under a "Short-stay residents" heading —
+// it's healthcare-personnel-level data (originally reported to CDC's NHSN),
+// published as its own separate Provider Data Catalog dataset.
 //
 // CMS reshuffles its Provider Data Catalog dataset identifiers periodically, so
 // rather than hardcode a UUID we look datasets up by title at run time. Column
@@ -57,11 +63,19 @@ const MDS_MEASURE_MATCHERS = {
 const RESIDENT_TYPE_COLUMN_CANDIDATES = ["resident type"];
 
 // measureId -> matcher against Provider Info column headers.
+// hprd deliberately targets the "Reported" (self-reported PBJ) figure, not
+// CMS's "Case-Mix" column — Care Compare's own consumer-facing page displays
+// the reported figure, and a user comparing our auto-fill against that page
+// saw a mismatch (4.2 vs. the 3.2 Care Compare showed) because the case-mix
+// column was being matched first. CMS's national case-mix adjustment isn't
+// guaranteed to equal NY DOH's own case-mix methodology anyway, so "reported"
+// is no less approximate and has the advantage of being directly verifiable
+// against what Care Compare itself shows.
 const PROVIDER_INFO_COLUMN_MATCHERS = {
-  hprd: ["case-mix", "total nurse staffing hours"],
+  hprd: ["reported total nurse staffing hours per resident per day"],
   turnover: ["total nursing staff turnover"],
 };
-const HPRD_FALLBACK_MATCH = ["reported total nurse staffing hours per resident per day"];
+const HPRD_CASE_MIX_FALLBACK_MATCH = ["case-mix", "total nurse staffing hours"];
 
 const CCN_COLUMN_CANDIDATES = ["cms certification number (ccn)", "cms certification number", "ccn", "federal provider number"];
 const STATE_COLUMN_CANDIDATES = ["state", "provider state"];
@@ -162,7 +176,7 @@ async function main() {
   log(`Loaded ${facilitiesDataset.facilities.length} facilities from bundled dataset (${ccnsWeCareAbout.size} unique CCNs).`);
 
   const measures = {};
-  for (const id of [...Object.keys(MDS_MEASURE_MATCHERS), ...Object.keys(PROVIDER_INFO_COLUMN_MATCHERS)]) {
+  for (const id of [...Object.keys(MDS_MEASURE_MATCHERS), ...Object.keys(PROVIDER_INFO_COLUMN_MATCHERS), "flu_vax_staff"]) {
     measures[id] = {};
   }
   const stats = { matchedRows: {}, unmatchedCcnSamples: {} };
@@ -234,7 +248,7 @@ async function main() {
       log(`  Columns available (sample):`, headers.slice(0, 15));
       for (const [measureId, terms] of Object.entries(PROVIDER_INFO_COLUMN_MATCHERS)) {
         let col = findColumn(headers, terms);
-        if (!col && measureId === "hprd") col = findColumn(headers, HPRD_FALLBACK_MATCH);
+        if (!col && measureId === "hprd") col = findColumn(headers, HPRD_CASE_MIX_FALLBACK_MATCH);
         if (!ccnCol || !col) {
           log(`  WARNING: could not resolve column for ${measureId} (ccnCol=${ccnCol}, col=${col}) — skipping.`);
           continue;
@@ -254,6 +268,75 @@ async function main() {
     }
   } else {
     log("WARNING: could not locate Provider Info dataset at all.");
+  }
+
+  // --- Healthcare Personnel flu vaccination (separate dataset from MDS Quality
+  // Measures — confirmed by user screenshot of Care Compare showing "Percentage
+  // of health care personnel who got a flu shot", not present in the 17 unique
+  // MDS measure descriptions logged by earlier runs). Title/shape unverified —
+  // try several plausible titles and log everything for the first real run.
+  const hcpFluDataset = await findDataset(["healthcare personnel", "vaccination"])
+    || await findDataset(["health care personnel", "vaccination"])
+    || await findDataset(["nursing home", "healthcare personnel"])
+    || await findDataset(["covid-19", "influenza", "vaccination"]);
+  if (hcpFluDataset) {
+    const rows = await loadRows(hcpFluDataset);
+    log(`  Downloaded ${rows.length} rows from "${hcpFluDataset.title}".`);
+    if (rows.length > 0) {
+      const headers = Object.keys(rows[0]);
+      log(`  All columns:`, headers);
+      const ccnCol = findColumn(headers, CCN_COLUMN_CANDIDATES) || findColumn(headers, ["ccn"]);
+      const descCol = findColumn(headers, ["measure description"]) || findColumn(headers, ["measure"]);
+      if (descCol) {
+        // Long format like MDS Quality Measures — match by description text.
+        const uniqueDescs = [...new Set(rows.map(r => r[descCol]).filter(Boolean))];
+        log(`  ${uniqueDescs.length} unique measure descriptions:`, uniqueDescs);
+        const scoreCol = headers.find(h => h.trim().toLowerCase() === "measure score")
+          || findColumn(headers, ["percentage"])
+          || findColumn(headers, ["score"]);
+        log(`  Columns resolved: ccn="${ccnCol}" description="${descCol}" score="${scoreCol}"`);
+        if (ccnCol && scoreCol) {
+          let matched = 0;
+          for (const row of rows) {
+            const desc = (row[descCol] || "").toLowerCase();
+            if (!desc.includes("health care personnel") && !desc.includes("healthcare personnel")) continue;
+            if (!desc.includes("flu") && !desc.includes("influenza")) continue;
+            const ccn = normalizeCcn(row[ccnCol]);
+            if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
+            const val = parseFloat(row[scoreCol]);
+            if (isNaN(val)) continue;
+            measures.flu_vax_staff[ccn] = round1(val);
+            matched++;
+          }
+          stats.matchedRows.flu_vax_staff = matched;
+          log(`  flu_vax_staff: matched ${matched} facility rows`);
+        }
+      } else {
+        // Wide format — one row per facility, a dedicated column for this stat.
+        const valCol = findColumn(headers, ["health care personnel", "flu"])
+          || findColumn(headers, ["healthcare personnel", "flu"])
+          || findColumn(headers, ["health care personnel", "influenza"])
+          || findColumn(headers, ["healthcare personnel", "influenza"]);
+        log(`  Columns resolved (wide format): ccn="${ccnCol}" value="${valCol}"`);
+        if (ccnCol && valCol) {
+          let matched = 0;
+          for (const row of rows) {
+            const ccn = normalizeCcn(row[ccnCol]);
+            if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
+            const val = parseFloat(row[valCol]);
+            if (isNaN(val)) continue;
+            measures.flu_vax_staff[ccn] = round1(val);
+            matched++;
+          }
+          stats.matchedRows.flu_vax_staff = matched;
+          log(`  flu_vax_staff: matched ${matched} facility rows`);
+        } else {
+          log("  WARNING: could not resolve a value column for flu_vax_staff — skipping.");
+        }
+      }
+    }
+  } else {
+    log("WARNING: could not locate a healthcare personnel flu vaccination dataset at all.");
   }
 
   const out = {
