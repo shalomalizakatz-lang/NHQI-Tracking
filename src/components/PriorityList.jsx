@@ -28,12 +28,17 @@ export default function PriorityList({ dataset, facility, vals }) {
       <div style={{ fontSize: 10, color: "#64748b", fontFamily: "monospace", letterSpacing: "0.08em", marginBottom: 12 }}>
         WHERE THIS FACILITY LANDS IN 2027 — RANKED BY REMAINING POINT OPPORTUNITY
       </div>
+      {items.some(x => x.m.pointsApproximate) && (
+        <div style={{ fontSize: 10, color: "#f59e0b", marginBottom: 10 }}>
+          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table — treat this projection as directional.
+        </div>
+      )}
       {items.map((x, i) => (
         <div key={x.m.id} style={{ background: "#0a1628", border: "1px solid #1e293b", borderRadius: 8, padding: "12px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#1e3a5f", fontFamily: "monospace", minWidth: 30 }}>#{i + 1}</div>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{x.m.short}</span>
+              <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{x.m.short}{x.m.pointsApproximate ? " ⚠" : ""}</span>
               <span style={{ fontSize: 10, background: qColor(x.q) + "22", color: qColor(x.q), border: `1px solid ${qColor(x.q)}`, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace" }}>Q{x.q} now</span>
               <span style={{ fontSize: 10, color: "#475569" }}>→</span>
               <span style={{ fontSize: 10, background: qColor(x.q - 1) + "22", color: qColor(x.q - 1), border: `1px solid ${qColor(x.q - 1)}`, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace" }}>Q{x.q - 1} target</span>

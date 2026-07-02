@@ -90,7 +90,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             const pts25 = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
             return (
               <View key={m.id} style={styles.tRow}>
-                <Text style={[styles.td, styles.colMeasure]}>{m.short}</Text>
+                <Text style={[styles.td, styles.colMeasure]}>{m.short}{m.pointsApproximate ? " *" : ""}</Text>
                 <Text style={[styles.td, styles.colVal]}>{fmt(a.value)}{m.unit && typeof a.value === "number" ? m.unit : ""}</Text>
                 <Text style={[styles.td, styles.colQ]}>{a.quintile ?? "—"}</Text>
                 <Text style={[styles.td, styles.colVal]}>{vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—"}</Text>
@@ -114,7 +114,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — treat as an estimate. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — treat as an estimate. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>

@@ -18,6 +18,7 @@ export const MEASURES = [
     short: "LS Weight Loss",
     full: "% of long stay residents who lose too much weight",
     unit: "%", higherIsBetter: false, scoring: "quintile", maxPts: 5, section: "quality",
+    pointsApproximate: true,
   },
   {
     id: "falls",
@@ -32,6 +33,7 @@ export const MEASURES = [
     short: "LS Depressive Symptoms",
     full: "% of long stay residents who have depressive symptoms",
     unit: "%", higherIsBetter: false, scoring: "quintile", maxPts: 5, section: "quality",
+    pointsApproximate: true,
   },
   {
     id: "adl",
@@ -58,12 +60,14 @@ export const MEASURES = [
     short: "LS Pneumococcal Vaccine",
     full: "% of long stay residents who received the pneumococcal vaccine",
     unit: "%", higherIsBetter: true, scoring: "quintile", maxPts: 5, section: "quality",
+    pointsApproximate: true,
   },
   {
     id: "flu_vax_resident",
     short: "LS Resident Flu Vaccine",
     full: "% of long stay residents who received the seasonal influenza vaccine",
     unit: "%", higherIsBetter: true, scoring: "quintile", maxPts: 5, section: "quality",
+    pointsApproximate: true,
   },
   {
     id: "contract_staff",
@@ -78,6 +82,7 @@ export const MEASURES = [
     short: "Staff Flu Vaccination",
     full: "% of employees vaccinated for the flu",
     unit: "%", higherIsBetter: true, scoring: "quintile", maxPts: 5, section: "quality",
+    pointsApproximate: true,
   },
   {
     id: "hprd",
@@ -91,6 +96,7 @@ export const MEASURES = [
     full: "% of nursing staff that left the nursing home over twelve months",
     unit: "%", higherIsBetter: false, scoring: "quintile", maxPts: 5, section: "quality",
     note: "Cut points are regionally adjusted by DOH office (WRO/CNYRO/CDRO vs. MARO differ)",
+    pointsApproximate: true,
   },
   {
     id: "health_inspect",
