@@ -85,6 +85,12 @@ const HPRD_CASE_MIX_FALLBACK_MATCH = ["case-mix", "total nurse staffing hours"];
 const CCN_COLUMN_CANDIDATES = ["cms certification number (ccn)", "cms certification number", "ccn", "federal provider number"];
 const STATE_COLUMN_CANDIDATES = ["state", "provider state"];
 
+// Average daily census, also from Provider Info — used to convert a measure's
+// percentage/rate gap into an actual headcount plan (see src/lib/actionPlan.js).
+// Not a scored measure, so it's stored under its own top-level "census" key
+// in the output rather than inside "measures".
+const CENSUS_COLUMN_MATCH = ["average number of residents per day"];
+
 function log(...args) {
   console.log(new Date().toISOString(), ...args);
 }
@@ -184,6 +190,7 @@ async function main() {
   for (const id of [...Object.keys(MDS_MEASURE_MATCHERS), ...Object.keys(PROVIDER_INFO_COLUMN_MATCHERS)]) {
     measures[id] = {};
   }
+  const census = {};
   const stats = { matchedRows: {}, unmatchedCcnSamples: {} };
 
   // --- MDS Quality Measures (long-stay, quarterly) ---
@@ -270,6 +277,23 @@ async function main() {
         stats.matchedRows[measureId] = matched;
         log(`  ${measureId} (column "${col}"): matched ${matched} facility rows`);
       }
+
+      const censusCol = findColumn(headers, CENSUS_COLUMN_MATCH);
+      if (ccnCol && censusCol) {
+        let matched = 0;
+        for (const row of rows) {
+          const ccn = normalizeCcn(row[ccnCol]);
+          if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
+          const val = parseFloat(row[censusCol]);
+          if (isNaN(val)) continue;
+          census[ccn] = round1(val);
+          matched++;
+        }
+        stats.matchedRows.census = matched;
+        log(`  census (column "${censusCol}"): matched ${matched} facility rows`);
+      } else {
+        log(`  WARNING: could not resolve census column (ccnCol=${ccnCol}, col=${censusCol}) — skipping.`);
+      }
     }
   } else {
     log("WARNING: could not locate Provider Info dataset at all.");
@@ -279,6 +303,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     source: "CMS Provider Data Catalog (data.cms.gov) — MDS Quality Measures & Provider Info datasets, matched by CMS Certification Number (CCN)",
     measures,
+    census,
   };
   await writeFile(OUT_PATH, JSON.stringify(out, null, 2) + "\n");
   log(`Wrote ${OUT_PATH}`);

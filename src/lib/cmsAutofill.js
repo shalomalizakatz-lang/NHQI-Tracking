@@ -16,6 +16,16 @@ export function getAutofillValue(measureId, medicareNumber) {
   return typeof v === "number" ? v : null;
 }
 
+// Average daily census (CMS Provider Info's "Average Number of Residents per
+// Day") — used to convert a measure's percentage/rate gap into a concrete
+// headcount plan (see src/lib/actionPlan.js). Not a scored measure, so it's
+// stored separately from `measures`.
+export function getCensus(medicareNumber) {
+  if (!medicareNumber) return null;
+  const v = cmsData.census?.[String(medicareNumber).trim().toUpperCase()];
+  return typeof v === "number" ? v : null;
+}
+
 export const cmsAutofillMeta = {
   generatedAt: cmsData.generatedAt || null,
   source: cmsData.source || "CMS Care Compare (data.cms.gov)",
