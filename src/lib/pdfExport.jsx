@@ -26,6 +26,15 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", bottom: 20, left: 28, right: 28, fontSize: 7, color: "#9ca3af" },
 });
 
+// react-pdf's default Helvetica is one of the 14 standard PDF fonts, which
+// only cover WinAnsiEncoding (~Windows-1252) — symbols outside that (arrows,
+// "approximately") don't throw, they just render as garbled/wrong glyphs. "—"
+// (em dash) and "·" (middle dot) used elsewhere in this file are both in
+// WinAnsi and render fine; "→" and "≈" are not, so swap them before render.
+function pdfSafe(text) {
+  return text.replace(/→/g, "->").replace(/≈/g, "~");
+}
+
 function fmt(v) {
   if (v === null || v === undefined) return "—";
   return typeof v === "number" ? v : v;
@@ -113,8 +122,8 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
           priorities.map((x, i) => (
             <View key={x.m.id} style={styles.priorityRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 8 }}>#{i + 1} {x.m.short} — Q{x.q} → Q{x.q - 1}{x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}</Text>
-                {x.actionPlan && <Text style={{ fontSize: 7.5, color: "#374151", marginTop: 1 }}>{x.actionPlan}</Text>}
+                <Text style={{ fontSize: 8 }}>{pdfSafe(`#${i + 1} ${x.m.short} — Q${x.q} → Q${x.q - 1}${x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}`)}</Text>
+                {x.actionPlan && <Text style={{ fontSize: 7.5, color: "#374151", marginTop: 1 }}>{pdfSafe(x.actionPlan)}</Text>}
               </View>
               <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
             </View>
@@ -122,7 +131,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`}
+          {pdfSafe(`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`)}
         </Text>
       </Page>
     </Document>
