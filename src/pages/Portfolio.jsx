@@ -139,7 +139,7 @@ export default function Portfolio() {
       </div>
 
       <div className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed">
-        {dataset.year} Score is out of 90. Current Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Est. quintile is directional — actual placement depends on that year's statewide distribution.
+        {dataset.year} Score is out of 90. Current Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta doesn't just subtract these two numbers (that would unfairly count PAH's missing points as a loss) — it removes PAH's points from the {dataset.year} score first, then compares that adjusted number to the Current Score, so both sides are measured on the same {TRACKABLE_MAX}-point basis. Est. quintile is directional — actual placement depends on that year's statewide distribution.
       </div>
     </div>
   );
