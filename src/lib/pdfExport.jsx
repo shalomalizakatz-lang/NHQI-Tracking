@@ -1,5 +1,7 @@
 import { Document, Page, View, Text, StyleSheet, pdf } from "@react-pdf/renderer";
 import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, getCutpoints, getQuintile, getGapToNext, getDisplayed2025Points } from "./scoring.js";
+import { getCensus } from "./cmsAutofill.js";
+import { getActionPlan } from "./actionPlan.js";
 
 const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111827" },
@@ -30,6 +32,7 @@ function fmt(v) {
 }
 
 function FacilityReport({ dataset, facility, displayName, vals, starVals, binaryVals, summary }) {
+  const census = getCensus(facility.medicareNumber);
   const priorities = MEASURES
     .filter(m => !m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah"))
     .map(m => {
@@ -38,7 +41,8 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
       const gapInfo = q && q > 1 ? getGapToNext(m, vals[m.id], q, cutpoints) : null;
       const table = m.scoring === "quintile_pah" ? [10, 8, 6, 2, 0] : [5, 3, 1, 0, 0];
       const ptGain = q ? table[q - 2] - table[q - 1] : 0;
-      return { m, q, gapInfo, ptGain };
+      const actionPlan = getActionPlan(m, gapInfo, census);
+      return { m, q, gapInfo, ptGain, actionPlan };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999))
@@ -108,14 +112,17 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         ) : (
           priorities.map((x, i) => (
             <View key={x.m.id} style={styles.priorityRow}>
-              <Text style={{ fontSize: 8 }}>#{i + 1} {x.m.short} — Q{x.q} → Q{x.q - 1}{x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 8 }}>#{i + 1} {x.m.short} — Q{x.q} → Q{x.q - 1}{x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}</Text>
+                {x.actionPlan && <Text style={{ fontSize: 7.5, color: "#374151", marginTop: 1 }}>{x.actionPlan}</Text>}
+              </View>
               <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
             </View>
           ))
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>
