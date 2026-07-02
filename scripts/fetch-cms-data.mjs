@@ -132,6 +132,21 @@ function findColumn(headers, mustIncludeAll) {
   }) || null;
 }
 
+// Diagnostic-only: the four guessed titles for the healthcare-personnel flu
+// vaccination dataset all missed on the first real run, and findDataset()
+// only samples 5 arbitrary titles on a miss (not helpful for finding the
+// real one among what could be hundreds of Provider Data Catalog datasets
+// covering hospitals, dialysis, home health, etc.). This filters by keyword
+// instead of exact-title-match so the actual title shows up in the log.
+async function logTitlesContaining(keywords) {
+  const items = await fetchJson(METASTORE_URL);
+  const matches = items.filter(it => {
+    const title = (it.title || "").toLowerCase();
+    return keywords.some(k => title.includes(k));
+  });
+  log(`  Titles containing any of [${keywords.join(", ")}] (${matches.length}):`, matches.map(i => i.title));
+}
+
 async function findDataset(titleMustInclude) {
   log("Searching Provider Data Catalog metastore for:", titleMustInclude.join(" + "));
   const items = await fetchJson(METASTORE_URL);
@@ -275,10 +290,13 @@ async function main() {
   // of health care personnel who got a flu shot", not present in the 17 unique
   // MDS measure descriptions logged by earlier runs). Title/shape unverified —
   // try several plausible titles and log everything for the first real run.
-  const hcpFluDataset = await findDataset(["healthcare personnel", "vaccination"])
+  let hcpFluDataset = await findDataset(["healthcare personnel", "vaccination"])
     || await findDataset(["health care personnel", "vaccination"])
     || await findDataset(["nursing home", "healthcare personnel"])
     || await findDataset(["covid-19", "influenza", "vaccination"]);
+  if (!hcpFluDataset) {
+    await logTitlesContaining(["flu", "personnel", "vaccin", "covid", "immuniz"]);
+  }
   if (hcpFluDataset) {
     const rows = await loadRows(hcpFluDataset);
     log(`  Downloaded ${rows.length} rows from "${hcpFluDataset.title}".`);
