@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T06:15:15.280Z",
+  "generatedAt": "2026-07-02T06:18:59.553Z",
   "source": "CMS Provider Data Catalog (data.cms.gov) — MDS Quality Measures & Provider Info datasets, matched by CMS Certification Number (CCN)",
   "measures": {
     "pressure_ulcer": {
@@ -6119,7 +6119,6 @@
       "335860": 44.2,
       "335876": 47.2,
       "335878": 33.3
-    },
-    "flu_vax_staff": {}
+    }
   }
 }
