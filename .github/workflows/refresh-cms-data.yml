@@ -3,7 +3,7 @@ name: Refresh CMS auto-fill data
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "17 9 * * 1" # every Monday 09:17 UTC
+    - cron: "17 9 1 * *" # 09:17 UTC on the 1st of every month
 
 permissions:
   contents: write
