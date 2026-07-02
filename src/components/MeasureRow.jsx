@@ -2,6 +2,8 @@ import { getQuintile, getPoints, getGapToNext } from "../lib/scoring.js";
 import { qColor, ptsColor, deltaColor, deltaArrow } from "../lib/colors.js";
 
 export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange }) {
+  if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} />;
+
   const q2025 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, val, cutpoints) : null;
   const pts2025 = getPoints(m, val, starVal, binaryVal, cutpoints);
   const hasVal = val !== "" && val !== null && val !== undefined;
@@ -171,6 +173,50 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
           {pts2025 > 0 ? `✓ Threshold met → ${pts2025} pts` : `✗ Threshold missed → 0 pts · Need ${m.thresholdDir === "lte" ? "≤" : "<"}${m.threshold}%`}
         </div>
       )}
+    </div>
+  );
+}
+
+function NotTrackableMeasureRow({ m, actual }) {
+  const a = actual || { value: null, quintile: null, points: 0 };
+  const aQuintileNum = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
+  const qc2023 = qColor(typeof aQuintileNum === "number" && !isNaN(aQuintileNum) ? aQuintileNum : null);
+
+  return (
+    <div style={{ background: "#0a1628", border: "1px solid #1e293b", borderRadius: 9, padding: "14px 16px", marginBottom: 8 }}>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{m.short}</div>
+        <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{m.full}</div>
+        {m.note && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{m.note}</div>}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 40px 1fr", gap: 8, marginBottom: 10, alignItems: "center" }}>
+        <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 7, padding: "10px 12px" }}>
+          <div style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace", letterSpacing: "0.1em", marginBottom: 4 }}>LAST RECORDED SCORE</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#94a3b8", fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>
+            {typeof a.value === "number" ? `${a.value}` : (a.value ?? "—")}
+            <span style={{ fontSize: 11, color: "#475569" }}>{m.unit}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {typeof aQuintileNum === "number" && !isNaN(aQuintileNum) && (
+              <span style={{ fontSize: 10, background: qc2023 + "22", color: qc2023, border: `1px solid ${qc2023}`, padding: "1px 6px", borderRadius: 3, fontFamily: "monospace", fontWeight: 700 }}>Q{aQuintileNum}</span>
+            )}
+            <span style={{ fontSize: 10, color: ptsColor(a.points, m.maxPts), fontFamily: "monospace" }}>{a.points}/{m.maxPts} pts</span>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", fontSize: 16, color: "#1e293b" }}>→</div>
+
+        <div style={{ background: "#0f172a", border: "1px solid #374151", borderRadius: 7, padding: "10px 12px" }}>
+          <div style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace", letterSpacing: "0.1em", marginBottom: 4 }}>2025 FULL-YEAR</div>
+          <div style={{ fontSize: 13, color: "#94a3b8" }}>Not self-trackable</div>
+          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>Carried forward from last recorded score</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, color: "#f59e0b", fontFamily: "monospace", lineHeight: 1.5 }}>
+        ⚠ {m.notTrackableNote}
+      </div>
     </div>
   );
 }
