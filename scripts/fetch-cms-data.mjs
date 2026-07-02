@@ -33,16 +33,23 @@ const METASTORE_URL = "https://data.cms.gov/provider-data/api/1/metastore/schema
 // measureId -> matcher against the MDS Quality Measures "Measure Description" column.
 // Each matcher is a list of substrings that must ALL appear (case-insensitive).
 const MDS_MEASURE_MATCHERS = {
-  pressure_ulcer: ["pressure ulcer", "high-risk"],
+  pressure_ulcer: ["pressure ulcer", "high"],
   weight_loss: ["lose too much weight"],
   falls: ["falls", "major injury"],
   depression: ["depressive symptoms"],
   adl: ["help with daily activities", "increased"],
   uti: ["urinary tract infection"],
-  incontinence: ["bowel or bladder", "low"],
+  incontinence: ["bowel", "bladder", "low"],
   pneumo_vax: ["pneumococcal vaccine"],
-  flu_vax_resident: ["influenza vaccine", "long-stay"],
+  flu_vax_resident: ["influenza vaccine"],
 };
+
+// Long-stay vs. short-stay is usually a separate "Resident type" column, not
+// embedded in the description text — first run showed flu_vax_resident matching
+// 0 rows (its old matcher required "long-stay" literally in the description) and
+// pneumo_vax matching ~2x the facility count (blending both resident types with
+// no filter at all). Filtered separately in main() once that column is resolved.
+const RESIDENT_TYPE_COLUMN_CANDIDATES = ["resident type"];
 
 // measureId -> matcher against Provider Info column headers.
 const PROVIDER_INFO_COLUMN_MATCHERS = {
@@ -155,16 +162,37 @@ async function main() {
     log(`  Downloaded ${rows.length} rows from "${mdsDataset.title}".`);
     if (rows.length > 0) {
       const headers = Object.keys(rows[0]);
+      log(`  All columns:`, headers);
       const ccnCol = findColumn(headers, ["cms certification number"]) || findColumn(headers, ["ccn"]);
       const descCol = findColumn(headers, ["measure description"]) || findColumn(headers, ["measure"]);
-      const scoreCol = findColumn(headers, ["measure score"]) || findColumn(headers, ["score"]) || findColumn(headers, ["adjusted score"]);
-      log(`  Columns resolved: ccn="${ccnCol}" description="${descCol}" score="${scoreCol}"`);
+      const residentTypeCol = findColumn(headers, RESIDENT_TYPE_COLUMN_CANDIDATES);
+      // Prefer a genuine composite score over a single stale quarter — the first
+      // run resolved to "Q1 Measure Score" because it's the first header whose
+      // name merely *contains* "measure score", which isn't the figure we want.
+      const scoreCol = headers.find(h => h.trim().toLowerCase() === "measure score")
+        || findColumn(headers, ["four quarter average score"])
+        || findColumn(headers, ["adjusted score"])
+        || findColumn(headers, ["q4 measure score"])
+        || findColumn(headers, ["measure score"]);
+      log(`  Columns resolved: ccn="${ccnCol}" description="${descCol}" residentType="${residentTypeCol}" score="${scoreCol}"`);
+      if (descCol) {
+        const uniqueDescs = [...new Set(rows.map(r => r[descCol]).filter(Boolean))];
+        log(`  ${uniqueDescs.length} unique measure descriptions:`, uniqueDescs);
+      }
+      if (residentTypeCol) {
+        const uniqueTypes = [...new Set(rows.map(r => r[residentTypeCol]).filter(Boolean))];
+        log(`  Resident type values:`, uniqueTypes);
+      }
       if (ccnCol && descCol && scoreCol) {
         for (const [measureId, terms] of Object.entries(MDS_MEASURE_MATCHERS)) {
           let matched = 0;
           for (const row of rows) {
             const desc = (row[descCol] || "").toLowerCase();
             if (!terms.every(t => desc.includes(t))) continue;
+            if (residentTypeCol) {
+              const rt = (row[residentTypeCol] || "").toLowerCase();
+              if (!rt.includes("long")) continue;
+            }
             const ccn = normalizeCcn(row[ccnCol]);
             if (!ccn || !ccnsWeCareAbout.has(ccn)) continue;
             const val = parseFloat(row[scoreCol]);
