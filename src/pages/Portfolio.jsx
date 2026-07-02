@@ -85,7 +85,8 @@ export default function Portfolio() {
             No facilities tracked yet. Search above to add one.
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-left">
                 {COLUMNS.map(c => (
@@ -134,6 +135,7 @@ export default function Portfolio() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
