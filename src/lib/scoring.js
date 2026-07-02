@@ -118,7 +118,9 @@ export const MEASURES = [
     short: "Potentially Avoidable Hospitalizations",
     full: "Potentially avoidable hospitalizations per 10,000 long stay days",
     unit: "/10k days", higherIsBetter: false, scoring: "quintile_pah", maxPts: 10, section: "efficiency",
-    note: "Q1=10 · Q2=8 · Q3=6 · Q4=2 · Q5=0 · Cannot be self-tracked — requires DOH's MDS→SPARCS match",
+    note: "Q1=10 · Q2=8 · Q3=6 · Q4=2 · Q5=0",
+    notTrackable: true,
+    notTrackableNote: "Cannot be self-tracked — requires DOH's MDS→SPARCS claims match, which is only available when DOH publishes the next NHQI cycle. The facility's last recorded score is shown and carried into projections as a placeholder.",
   },
 ];
 
@@ -202,6 +204,18 @@ export function estimateQuintile(totalPts) {
   return pct >= 80 ? 1 : pct >= 60 ? 2 : pct >= 40 ? 3 : pct >= 20 ? 4 : 5;
 }
 
+// For measures flagged notTrackable (currently just PAH), there's no 2025 input —
+// the facility's last recorded (2023) points are carried forward as a placeholder
+// once the facility has at least one other real 2025 entry, so the projected total
+// stays on the same 90-point scale instead of silently capping below it.
+export function getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, hasEntries) {
+  if (m.notTrackable) {
+    return hasEntries ? (facility.actuals[m.id]?.points ?? null) : null;
+  }
+  const cutpoints = getCutpoints(dataset, m.id, facility.region);
+  return getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
+}
+
 // Computes a facility's 2023 actual vs. entered full-year projection summary,
 // used by both the Portfolio table and the per-facility Dashboard tab.
 export function computeFacilitySummary(dataset, facility, inputs) {
@@ -212,15 +226,21 @@ export function computeFacilitySummary(dataset, facility, inputs) {
   const starVals = inputs?.starVals ?? {};
   const binaryVals = inputs?.binaryVals ?? {};
 
-  let score2025 = 0, entered = 0;
+  let enteredScore = 0, entered = 0;
   for (const m of MEASURES) {
+    if (m.notTrackable) continue;
     const cutpoints = getCutpoints(dataset, m.id, facility.region);
     const p = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
-    if (p !== null) { score2025 += p; entered++; }
+    if (p !== null) { enteredScore += p; entered++; }
   }
 
-  const round1 = n => Math.round(n * 10) / 10;
   const hasEntries = entered > 0;
+  const carriedScore = hasEntries
+    ? MEASURES.filter(m => m.notTrackable).reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0)
+    : 0;
+  const score2025 = enteredScore + carriedScore;
+
+  const round1 = n => Math.round(n * 10) / 10;
   return {
     score2023,
     quintile2023,

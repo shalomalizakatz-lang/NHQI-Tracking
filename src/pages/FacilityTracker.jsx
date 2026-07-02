@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
-import { MEASURES, SECTION_MAX, getCutpoints, getPoints, getQuintile, computeFacilitySummary } from "../lib/scoring.js";
+import { MEASURES, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
 import { qColor, ptsColor } from "../lib/colors.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
@@ -220,8 +220,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
           const max = SECTION_MAX[sec.key];
           const pts23 = measures.reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0);
           const pts25 = measures.reduce((a, m) => {
-            const cutpoints = getCutpoints(dataset, m.id, facility.region);
-            const p = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
+            const p = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
             return a + (p ?? 0);
           }, 0);
           const pct23 = (pts23 / max) * 100;
@@ -249,8 +248,8 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 16px" }}>
           {MEASURES.map(m => {
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
-            const q25 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, vals[m.id], cutpoints) : null;
-            const pts25 = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
+            const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
+            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
             const a = facility.actuals[m.id] || { quintile: null, points: 0 };
             const aQ = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
             const moved = typeof aQ === "number" && !isNaN(aQ) && q25 !== null && q25 !== aQ;

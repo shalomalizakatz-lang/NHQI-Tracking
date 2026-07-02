@@ -1,5 +1,5 @@
 import { Document, Page, View, Text, StyleSheet, pdf } from "@react-pdf/renderer";
-import { MEASURES, getCutpoints, getPoints, getQuintile, getGapToNext } from "./scoring.js";
+import { MEASURES, getCutpoints, getQuintile, getGapToNext, getDisplayed2025Points } from "./scoring.js";
 
 const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111827" },
@@ -31,7 +31,7 @@ function fmt(v) {
 
 function FacilityReport({ dataset, facility, displayName, vals, starVals, binaryVals, summary }) {
   const priorities = MEASURES
-    .filter(m => m.scoring === "quintile" || m.scoring === "quintile_pah")
+    .filter(m => !m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah"))
     .map(m => {
       const cutpoints = getCutpoints(dataset, m.id, facility.region);
       const q = getQuintile(m, vals[m.id], cutpoints);
@@ -86,14 +86,15 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
           {MEASURES.map(m => {
             const a = facility.actuals[m.id] || {};
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
-            const q25 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, vals[m.id], cutpoints) : null;
-            const pts25 = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
+            const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
+            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals, summary.entered > 0);
+            const val2025Display = m.notTrackable ? "not trackable" : (vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—");
             return (
               <View key={m.id} style={styles.tRow}>
                 <Text style={[styles.td, styles.colMeasure]}>{m.short}{m.pointsApproximate ? " *" : ""}</Text>
                 <Text style={[styles.td, styles.colVal]}>{fmt(a.value)}{m.unit && typeof a.value === "number" ? m.unit : ""}</Text>
                 <Text style={[styles.td, styles.colQ]}>{a.quintile ?? "—"}</Text>
-                <Text style={[styles.td, styles.colVal]}>{vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—"}</Text>
+                <Text style={[styles.td, styles.colVal]}>{val2025Display}</Text>
                 <Text style={[styles.td, styles.colQ]}>{q25 ?? "—"}</Text>
                 <Text style={[styles.td, styles.colPts]}>{fmt(a.points)} / {fmt(pts25)}</Text>
               </View>
@@ -114,7 +115,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — treat as an estimate. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — its last recorded score is carried forward into the 2025 projection as a placeholder. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; 2025 points shown here are directional. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>

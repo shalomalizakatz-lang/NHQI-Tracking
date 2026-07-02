@@ -5,7 +5,7 @@ const QUINTILE_POINTS = { quintile: [5, 3, 1, 0, 0], quintile_pah: [10, 8, 6, 2,
 
 export default function PriorityList({ dataset, facility, vals }) {
   const items = MEASURES
-    .filter(m => m.scoring === "quintile" || m.scoring === "quintile_pah")
+    .filter(m => !m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah"))
     .map(m => {
       const cutpoints = getCutpoints(dataset, m.id, facility.region);
       const q = getQuintile(m, vals[m.id], cutpoints);
