@@ -114,9 +114,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {dataset.year} actuals from NY DOH NHQI dataset ({dataset.source}). Cut points regionally adjusted where applicable ({facility.region}).
-          PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — treat as an estimate. Est. 2027 quintile is directional, not guaranteed.
-          Generated {new Date().toLocaleDateString()}.
+          {`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match) — treat as an estimate. Est. 2027 quintile is directional, not guaranteed. Generated ${new Date().toLocaleDateString()}.`}
         </Text>
       </Page>
     </Document>

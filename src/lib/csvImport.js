@@ -21,6 +21,13 @@ const MEASURE_MAP = {
   "18": "pah",
 };
 
+const META_MAP = {
+  "19": "facility_score",
+  "20": "facility_quintile_rank",
+  "21": "jkl_deficiency",
+  "22": "closure",
+};
+
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -108,6 +115,16 @@ export function parseNhqiCsv(text) {
     }
     const fac = facilities[fid];
     const mid = row[col.measureId];
+
+    const metaKey = META_MAP[mid];
+    if (metaKey) {
+      if (metaKey === "facility_score") fac.totalScore = toNum(row[col.points]);
+      else if (metaKey === "facility_quintile_rank") fac.overallQuintile = toNum(row[col.numValue]);
+      else if (metaKey === "jkl_deficiency") fac.jklDeficiency = (row[col.charValue] || "").trim() === "Yes";
+      else if (metaKey === "closure") fac.closed = (row[col.charValue] || "").trim() === "Yes";
+      continue;
+    }
+
     const key = MEASURE_MAP[mid];
     if (!key) continue;
 
