@@ -1,7 +1,9 @@
 import { Document, Page, View, Text, StyleSheet, pdf } from "@react-pdf/renderer";
-import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, getCutpoints, getQuintile, getGapToNext, getDisplayed2025Points } from "./scoring.js";
-import { getCensus } from "./cmsAutofill.js";
+import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, getCutpoints, getQuintile, getPoints, getGapToNext, getDisplayed2025Points } from "./scoring.js";
+import { getCensus, getLiveCutpoints } from "./cmsAutofill.js";
 import { getActionPlan } from "./actionPlan.js";
+
+const LIVE_PDF_COLOR = "#7c3aed";
 
 const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica", color: "#111827" },
@@ -18,10 +20,13 @@ const styles = StyleSheet.create({
   tRow: { flexDirection: "row", borderBottom: "1px solid #f3f4f6" },
   th: { padding: 3, fontSize: 7, fontWeight: 700, color: "#374151" },
   td: { padding: 3, fontSize: 7.5, color: "#111827" },
-  colMeasure: { width: "34%" },
-  colVal: { width: "14%", textAlign: "right" },
-  colQ: { width: "10%", textAlign: "center" },
-  colPts: { width: "14%", textAlign: "right" },
+  colMeasure: { width: "23%" },
+  colValYr: { width: "9%", textAlign: "right" },
+  colQYr: { width: "7%", textAlign: "center" },
+  colPtsYr: { width: "8%", textAlign: "right" },
+  colValCur: { width: "9%", textAlign: "right" },
+  colQ: { width: "7%", textAlign: "center" },
+  colPts: { width: "8%", textAlign: "right" },
   priorityRow: { flexDirection: "row", justifyContent: "space-between", border: "1px solid #e5e7eb", borderRadius: 3, padding: 5, marginBottom: 3 },
   footer: { position: "absolute", bottom: 20, left: 28, right: 28, fontSize: 7, color: "#9ca3af" },
 });
@@ -74,12 +79,34 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
           </View>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Current Score (excl. PAH)</Text>
-            <Text style={styles.scoreVal}>{summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—"}</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View>
+                <Text style={{ fontSize: 6, color: "#9ca3af" }}>DOH</Text>
+                <Text style={styles.scoreVal}>{summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—"}</Text>
+              </View>
+              {summary.score2025Live !== null && (
+                <View>
+                  <Text style={{ fontSize: 6, color: "#9ca3af" }}>Live</Text>
+                  <Text style={[styles.scoreVal, { color: LIVE_PDF_COLOR }]}>{summary.score2025Live}/{summary.liveMax}</Text>
+                </View>
+              )}
+            </View>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>{summary.entered}/{TRACKABLE_MEASURES.length} trackable measures entered</Text>
           </View>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Est. Quintile</Text>
-            <Text style={styles.scoreVal}>{summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—"}</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View>
+                <Text style={{ fontSize: 6, color: "#9ca3af" }}>DOH</Text>
+                <Text style={styles.scoreVal}>{summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—"}</Text>
+              </View>
+              {summary.quintile2027Live !== null && (
+                <View>
+                  <Text style={{ fontSize: 6, color: "#9ca3af" }}>Live</Text>
+                  <Text style={[styles.scoreVal, { color: LIVE_PDF_COLOR }]}>Q{summary.quintile2027Live}</Text>
+                </View>
+              )}
+            </View>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>
               {summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Enter current data to project"}
             </Text>
@@ -90,26 +117,35 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         <View style={styles.table}>
           <View style={styles.tHeadRow}>
             <Text style={[styles.th, styles.colMeasure]}>Measure</Text>
-            <Text style={[styles.th, styles.colVal]}>{dataset.year}</Text>
-            <Text style={[styles.th, styles.colQ]}>Q</Text>
-            <Text style={[styles.th, styles.colVal]}>Current</Text>
-            <Text style={[styles.th, styles.colQ]}>Q</Text>
-            <Text style={[styles.th, styles.colPts]}>Pts (yr/cur)</Text>
+            <Text style={[styles.th, styles.colValYr]}>{dataset.year}</Text>
+            <Text style={[styles.th, styles.colQYr]}>Q</Text>
+            <Text style={[styles.th, styles.colPtsYr]}>Pts</Text>
+            <Text style={[styles.th, styles.colValCur]}>Current</Text>
+            <Text style={[styles.th, styles.colQ]}>DOH Q</Text>
+            <Text style={[styles.th, styles.colPts]}>DOH Pts</Text>
+            <Text style={[styles.th, styles.colQ, { color: LIVE_PDF_COLOR }]}>Live Q</Text>
+            <Text style={[styles.th, styles.colPts, { color: LIVE_PDF_COLOR }]}>Live Pts</Text>
           </View>
           {MEASURES.map(m => {
             const a = facility.actuals[m.id] || {};
             const cutpoints = getCutpoints(dataset, m.id, facility.region);
             const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
             const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
+            const liveCutpoints = (!m.notTrackable && m.scoring === "quintile") ? getLiveCutpoints(m.id) : null;
+            const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
+            const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : null;
             const val2025Display = m.notTrackable ? "not trackable" : (vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—");
             return (
               <View key={m.id} style={styles.tRow}>
                 <Text style={[styles.td, styles.colMeasure]}>{m.short}{m.pointsApproximate ? " *" : ""}</Text>
-                <Text style={[styles.td, styles.colVal]}>{fmt(a.value)}{m.unit && typeof a.value === "number" ? m.unit : ""}</Text>
-                <Text style={[styles.td, styles.colQ]}>{a.quintile ?? "—"}</Text>
-                <Text style={[styles.td, styles.colVal]}>{val2025Display}</Text>
+                <Text style={[styles.td, styles.colValYr]}>{fmt(a.value)}{m.unit && typeof a.value === "number" ? m.unit : ""}</Text>
+                <Text style={[styles.td, styles.colQYr]}>{a.quintile ?? "—"}</Text>
+                <Text style={[styles.td, styles.colPtsYr]}>{fmt(a.points)}</Text>
+                <Text style={[styles.td, styles.colValCur]}>{val2025Display}</Text>
                 <Text style={[styles.td, styles.colQ]}>{q25 ?? "—"}</Text>
-                <Text style={[styles.td, styles.colPts]}>{fmt(a.points)} / {fmt(pts25)}</Text>
+                <Text style={[styles.td, styles.colPts]}>{fmt(pts25)}</Text>
+                <Text style={[styles.td, styles.colQ, { color: LIVE_PDF_COLOR }]}>{qLive ?? "—"}</Text>
+                <Text style={[styles.td, styles.colPts, { color: LIVE_PDF_COLOR }]}>{fmt(ptsLive)}</Text>
               </View>
             );
           })}
@@ -131,7 +167,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {pdfSafe(`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). Cut points regionally adjusted where applicable (${facility.region}). PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`)}
+          {pdfSafe(`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). DOH cut points regionally adjusted where applicable (${facility.region}). Live cut points rank the same entered numbers against a live NY-wide benchmark computed from current CMS data instead — a directional second opinion, not a DOH-certified figure; shown only for measures with a live cut-point split available. PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`)}
         </Text>
       </Page>
     </Document>

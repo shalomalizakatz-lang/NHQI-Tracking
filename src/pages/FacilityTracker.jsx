@@ -164,11 +164,33 @@ export default function FacilityTracker() {
             <>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Current Score (excl. PAH)</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <div>
+                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
+                  </div>
+                  {summary.score2025Live !== null && (
+                    <div>
+                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>{summary.score2025Live}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{summary.liveMax}</span></div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <div>
+                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
+                  </div>
+                  {summary.quintile2027Live !== null && (
+                    <div>
+                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>Q{summary.quintile2027Live}</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -198,12 +220,12 @@ export default function FacilityTracker() {
         {tab === "priority" && (
           <div>
             <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
-              {dataset.year}: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
+              {dataset.year} actual: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; Current (DOH cut points): <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; vs. DOH 2023 cut points: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
               {summary.quintile2027Live !== null && (
-                <span> &nbsp;·&nbsp; Live cut points: <strong style={{ color: qcLive }}>est. Q{summary.quintile2027Live}</strong></span>
+                <span> &nbsp;·&nbsp; vs. Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>
               )}
             </div>
             <PriorityList dataset={dataset} facility={facility} vals={vals} />
@@ -221,17 +243,39 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
-          { key: "actual", label: `${dataset.year} Actual Score`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#475569" },
-          { key: "current", label: "Current Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
-          { key: "quintile", label: "Est. Quintile", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
+          {
+            key: "actual", label: `${dataset.year} Actual Score`, sub: `Actual · drove ${dataset.year} payment`,
+            values: [{ val: `${summary.score2023}/90`, color: "#475569" }],
+          },
+          {
+            key: "current", label: "Current Score (excl. PAH)",
+            sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data",
+            values: [
+              { tag: "DOH", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", color: qc },
+              ...(summary.score2025Live !== null ? [{ tag: "Live", val: `${summary.score2025Live}/${summary.liveMax}`, color: qcLive }] : []),
+            ],
+          },
+          {
+            key: "quintile", label: "Est. Quintile",
+            sub: [
+              summary.quintile2027 !== null ? `DOH: ${summary.quintile2027 <= 3 ? "positive" : "negative"} pool` : null,
+              summary.quintile2027Live !== null ? `Live: ${summary.quintile2027Live <= 3 ? "positive" : "negative"} pool` : null,
+            ].filter(Boolean).join(" · ") || "Projected from current rates",
+            values: [
+              { tag: "DOH", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", color: qc },
+              ...(summary.quintile2027Live !== null ? [{ tag: "Live", val: `Q${summary.quintile2027Live}`, color: qcLive }] : []),
+            ],
+          },
         ].map(c => (
           <div key={c.key} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <div style={{ fontSize: 26, fontWeight: 700, color: c.color, fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>{c.val}</div>
-              {c.key === "quintile" && summary.quintile2027Live !== null && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: qcLive, background: qcLive + "14", border: `1px solid ${qcLive}40`, borderRadius: 99, padding: "2px 7px" }}>Live Q{summary.quintile2027Live}</span>
-              )}
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 4 }}>
+              {c.values.map((v, i) => (
+                <div key={i}>
+                  {v.tag && <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.03em" }}>{v.tag}</div>}
+                  <div style={{ fontSize: c.values.length > 1 ? 22 : 26, fontWeight: 700, color: v.color, fontFamily: "monospace", lineHeight: 1 }}>{v.val}</div>
+                </div>
+              ))}
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8" }}>{c.sub}</div>
           </div>
