@@ -62,8 +62,9 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
       const liveCutpoints = m.scoring === "quintile" ? getLiveCutpoints(m.id) : null;
       const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
       const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
+      const actionPlanLive = getActionPlan(m, gapInfoLive, census);
 
-      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive };
+      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999))
@@ -171,16 +172,15 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 8 }}>{pdfSafe(`#${i + 1} ${x.m.short}`)}</Text>
                 <Text style={{ fontSize: 7.5, color: "#374151" }}>
-                  {pdfSafe(`DOH: Q${x.q} → Q${x.q - 1}${x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}`)}
+                  {pdfSafe(`DOH: Q${x.q} → Q${x.q - 1}${x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}${x.actionPlan ? ` — ${x.actionPlan}` : ""}`)}
                 </Text>
                 {x.qLive !== null && (
                   <Text style={{ fontSize: 7.5, color: LIVE_PDF_COLOR }}>
                     {pdfSafe(x.qLive > 1
-                      ? `Live: Q${x.qLive} → Q${x.qLive - 1}${x.gapInfoLive ? ` (need ${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfoLive.target})` : ""}`
+                      ? `Live: Q${x.qLive} → Q${x.qLive - 1}${x.gapInfoLive ? ` (need ${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfoLive.target})` : ""}${x.actionPlanLive ? ` — ${x.actionPlanLive}` : ""}`
                       : `Live: Q${x.qLive} (already top quintile)`)}
                   </Text>
                 )}
-                {x.actionPlan && <Text style={{ fontSize: 7.5, color: "#374151", marginTop: 1 }}>{pdfSafe(x.actionPlan)}</Text>}
               </View>
               <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
             </View>
