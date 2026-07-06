@@ -1,10 +1,30 @@
 import { getQuintile, getPoints, getGapToNext } from "../lib/scoring.js";
 import { qColor, ptsColor, deltaColor, deltaArrow } from "../lib/colors.js";
+import { getLiveCutpoints, getLiveCutpointsFacilityCount } from "../lib/cmsAutofill.js";
+
+const LIVE_COLOR = "#6d28d9";
+
+// Only quintile-scored measures get a live NY benchmark (see QUINTILE_MEASURE_IDS
+// in scripts/fetch-cms-data.mjs) — threshold/star/binary measures aren't split into
+// quintiles at all, and flu_vax_staff has no public CMS data source to compute one from.
+function liveUnavailableNote(m) {
+  if (m.scoring === "threshold") return "Threshold-scored measure (pass/fail vs. a fixed bar) — no live quintile benchmark applies.";
+  if (m.scoring === "star_map") return "Scored via CMS's own five-star rating — no separate live quintile benchmark applies.";
+  if (m.scoring === "binary") return "Binary submission measure — no live quintile benchmark applies.";
+  if (m.id === "flu_vax_staff") return "CMS's public data catalog doesn't include employee flu vaccination rates — no live benchmark available.";
+  return null;
+}
 
 export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year, isAutofilled }) {
   if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} year={year} />;
 
+  const liveCutpoints = m.scoring === "quintile" ? getLiveCutpoints(m.id) : null;
+  const hasLive = !!liveCutpoints;
+  const liveCount = hasLive ? getLiveCutpointsFacilityCount(m.id) : null;
+
   const q2025 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, val, cutpoints) : null;
+  const qLive = hasLive ? getQuintile(m, val, liveCutpoints) : null;
+  const ptsLive = hasLive ? getPoints(m, val, starVal, binaryVal, liveCutpoints) : null;
   const pts2025 = getPoints(m, val, starVal, binaryVal, cutpoints);
   const hasVal = val !== "" && val !== null && val !== undefined;
   const gapInfo = (m.scoring === "quintile" || m.scoring === "quintile_pah") && q2025 && q2025 > 1
@@ -47,6 +67,14 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
           </div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{m.full}</div>
           {m.note && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{m.note}</div>}
+          {!hasLive && liveUnavailableNote(m) && (
+            <div style={{ fontSize: 10, color: "#c4b5fd", marginTop: 2, fontStyle: "italic" }}>{liveUnavailableNote(m)}</div>
+          )}
+          {hasLive && m.id === "turnover" && (
+            <div style={{ fontSize: 10, color: LIVE_COLOR, marginTop: 2, fontStyle: "italic" }}>
+              Live benchmark below is a single statewide split — DOH's official cut point is regionally adjusted (see note above).
+            </div>
+          )}
         </div>
         {ptsDelta !== null && ptsDelta !== 0 && (
           <div style={{ color: ptsDelta > 0 ? "#16a34a" : "#dc2626", fontSize: 12, fontWeight: 700, flexShrink: 0, marginLeft: 10, whiteSpace: "nowrap" }}>
@@ -55,10 +83,10 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 32px 1fr", gap: 8, marginBottom: 12, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
 
-        <div style={{ background: "#fafaf9", borderRadius: 8, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>{year} ACTUAL</div>
+        <div style={{ background: "#fafaf9", borderRadius: 8, padding: "10px 12px", flex: "1 1 150px", minWidth: 150 }}>
+          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.03em", marginBottom: 4 }}>{year} DOH OFFICIAL</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>
             {typeof a.value === "number" ? `${a.value}` : (a.value ?? "—")}
             <span style={{ fontSize: 11, color: "#94a3b8" }}>{m.unit}</span>
@@ -71,18 +99,29 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
           </div>
         </div>
 
-        <div style={{ textAlign: "center" }}>
-          {delta !== null ? (
-            <div>
-              <div style={{ fontSize: 15, color: dc, fontWeight: 700 }}>{da}</div>
-              <div style={{ fontSize: 9, color: dc, fontFamily: "monospace" }}>{Math.abs(delta).toFixed(1)}</div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 15, color: "#cbd5e1" }}>→</div>
-          )}
-        </div>
+        {hasLive && (
+          <div style={{ background: "#f5f3ff", borderRadius: 8, padding: "10px 12px", flex: "1 1 150px", minWidth: 150 }}>
+            <div style={{ fontSize: 10, color: LIVE_COLOR, letterSpacing: "0.03em", marginBottom: 4 }}>LIVE CMS PROJECTION</div>
+            {hasVal ? (
+              <>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>
+                  {val}<span style={{ fontSize: 11, color: "#94a3b8" }}>{m.unit}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {qLive && (
+                    <span style={{ fontSize: 10, background: qColor(qLive) + "14", color: qColor(qLive), border: `1px solid ${qColor(qLive)}40`, padding: "1px 6px", borderRadius: 99, fontWeight: 600 }}>Q{qLive}</span>
+                  )}
+                  {ptsLive !== null && <span style={{ fontSize: 10, color: LIVE_COLOR }}>{ptsLive}/{m.maxPts} pts</span>}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 10, color: "#c4b5fd", marginBottom: 4 }}>enter current value to compare</div>
+            )}
+            <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 4 }}>vs. {liveCount} NY facilities · directional, not DOH-certified</div>
+          </div>
+        )}
 
-        <div style={{ background: "#f0fdfa", borderRadius: 8, padding: "10px 12px" }}>
+        <div style={{ background: "#f0fdfa", borderRadius: 8, padding: "10px 12px", flex: "1 1 150px", minWidth: 150 }}>
           <div style={{ fontSize: 10, color: "#0d9488", letterSpacing: "0.03em", marginBottom: 4 }}>CURRENT FULL-YEAR</div>
 
           {(m.scoring === "quintile" || m.scoring === "quintile_pah" || m.scoring === "threshold") && (
@@ -125,11 +164,15 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
             )}
             {!hasVal && m.scoring !== "star_map" && m.scoring !== "binary" && <span style={{ fontSize: 10, color: "#5eead4" }}>enter value</span>}
           </div>
+          {delta !== null && (
+            <div style={{ fontSize: 9, color: dc, marginTop: 4 }}>{da} {Math.abs(delta).toFixed(1)} vs {year}</div>
+          )}
         </div>
       </div>
 
       {cutpoints.length > 0 && (
-        <div style={{ display: "flex", gap: 4, marginBottom: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4, marginBottom: hasLive ? 4 : 8, flexWrap: "wrap", alignItems: "center" }}>
+          {hasLive && <span style={{ fontSize: 9, color: "#94a3b8", marginRight: 2 }}>DOH:</span>}
           {[1, 2, 3, 4, 5].map(qi => {
             const isActive2025 = q2025 === qi;
             const isActive2023 = aQuintileNum === qi;
@@ -141,6 +184,23 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
               <div key={qi} style={{ padding: "2px 7px", borderRadius: 99, fontSize: 10, background: isActive2025 ? c + "1c" : "#fafaf9", border: `1px solid ${isActive2025 ? c + "60" : "#f0efed"}`, color: isActive2025 ? c : "#94a3b8", fontWeight: isActive2025 ? 600 : 400 }}>
                 Q{qi}: {label}{m.unit === "/10k days" || m.unit === "hrs" ? ` ${m.unit}` : "%"}
                 {isActive2023 && !isActive2025 && <span style={{ marginLeft: 3, opacity: 0.7 }}>·{String(year).slice(-2)}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {hasLive && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 9, color: "#a78bfa", marginRight: 2 }}>Live:</span>
+          {[1, 2, 3, 4, 5].map(qi => {
+            const isActiveLive = qLive === qi;
+            const label = m.higherIsBetter
+              ? qi === 1 ? `≥${liveCutpoints[0]}` : qi === 5 ? `<${liveCutpoints[3]}` : `${liveCutpoints[qi - 1]}–${liveCutpoints[qi - 2]}`
+              : qi === 1 ? `≤${liveCutpoints[0]}` : qi === 5 ? `>${liveCutpoints[3]}` : `${liveCutpoints[qi - 2]}–${liveCutpoints[qi - 1]}`;
+            return (
+              <div key={qi} style={{ padding: "2px 7px", borderRadius: 99, fontSize: 10, background: isActiveLive ? LIVE_COLOR + "14" : "#faf5ff", border: `1px solid ${isActiveLive ? LIVE_COLOR + "60" : "#f3e8ff"}`, color: isActiveLive ? LIVE_COLOR : "#c4b5fd", fontWeight: isActiveLive ? 600 : 400 }}>
+                Q{qi}: {label}{m.unit === "/10k days" || m.unit === "hrs" ? ` ${m.unit}` : "%"}
               </div>
             );
           })}
