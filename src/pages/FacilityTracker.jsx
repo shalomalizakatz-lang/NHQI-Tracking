@@ -2,12 +2,14 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
-import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
+import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, getPoints, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
 import { qColor, ptsColor } from "../lib/colors.js";
 import { getAutofillValue, cmsAutofillMeta, getLiveCutpoints } from "../lib/cmsAutofill.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
 import { downloadFacilityPdf } from "../lib/pdfExport.jsx";
+
+const LIVE_COLOR = "#6d28d9";
 
 const SECTIONS = [
   { key: "quality", label: "Quality Measures" },
@@ -331,18 +333,33 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
             const a = facility.actuals[m.id] || { quintile: null, points: 0 };
             const aQ = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
             const moved = typeof aQ === "number" && !isNaN(aQ) && q25 !== null && q25 !== aQ;
+            const liveCutpoints = (!m.notTrackable && m.scoring === "quintile") ? getLiveCutpoints(m.id) : null;
+            const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
+            const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : null;
             return (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0", borderBottom: "1px solid #f0efed" }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: pts25 !== null ? ptsColor(pts25, m.maxPts) : "#e2e8f0", flexShrink: 0 }} />
-                <div style={{ flex: 1, fontSize: 12, color: pts25 !== null ? "#0f172a" : "#cbd5e1" }}>{m.short}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
-                  {typeof aQ === "number" && !isNaN(aQ) ? <span style={{ color: qColor(aQ) }}>Q{aQ}</span> : <span>—</span>}
-                  {q25 && <span style={{ color: moved ? (q25 < aQ ? "#16a34a" : "#dc2626") : "#94a3b8" }}> → Q{q25}</span>}
+              <div key={m.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0efed" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: pts25 !== null ? ptsColor(pts25, m.maxPts) : "#e2e8f0", flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 12, color: pts25 !== null ? "#0f172a" : "#cbd5e1" }}>{m.short}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+                    {typeof aQ === "number" && !isNaN(aQ) ? <span style={{ color: qColor(aQ) }}>Q{aQ}</span> : <span>—</span>}
+                    {q25 && <span style={{ color: moved ? (q25 < aQ ? "#16a34a" : "#dc2626") : "#94a3b8" }}> → Q{q25}</span>}
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: "#94a3b8" }}>
+                    <span>{a.points ?? 0}</span>
+                    {m.notTrackable ? <span style={{ color: "#d97706" }}> n/a</span> : pts25 !== null && <span style={{ color: "#0d9488" }}> → {pts25}</span>}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: "#94a3b8" }}>
-                  <span>{a.points ?? 0}</span>
-                  {m.notTrackable ? <span style={{ color: "#d97706" }}> n/a</span> : pts25 !== null && <span style={{ color: "#0d9488" }}> → {pts25}</span>}
-                </div>
+                {qLive !== null && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                    <div style={{ width: 6, flexShrink: 0 }} />
+                    <div style={{ flex: 1, fontSize: 9, color: LIVE_COLOR }}>Live</div>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", color: qColor(qLive) }}>Q{qLive}</div>
+                    <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: LIVE_COLOR }}>
+                      {ptsLive}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
