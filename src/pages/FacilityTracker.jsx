@@ -338,10 +338,14 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
             const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : null;
             return (
               <div key={m.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0efed" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: pts25 !== null ? ptsColor(pts25, m.maxPts) : "#e2e8f0", flexShrink: 0 }} />
-                  <div style={{ flex: 1, fontSize: 12, color: pts25 !== null ? "#0f172a" : "#cbd5e1" }}>{m.short}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: pts25 !== null ? "#0f172a" : "#cbd5e1" }}>{m.short}</div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12 }}>
+                  <span style={{ fontSize: 9, color: "#94a3b8", minWidth: 26 }}>DOH</span>
+                  <div style={{ flex: 1, fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
                     {typeof aQ === "number" && !isNaN(aQ) ? <span style={{ color: qColor(aQ) }}>Q{aQ}</span> : <span>—</span>}
                     {q25 && <span style={{ color: moved ? (q25 < aQ ? "#16a34a" : "#dc2626") : "#94a3b8" }}> → Q{q25}</span>}
                   </div>
@@ -350,11 +354,11 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
                     {m.notTrackable ? <span style={{ color: "#d97706" }}> n/a</span> : pts25 !== null && <span style={{ color: "#0d9488" }}> → {pts25}</span>}
                   </div>
                 </div>
+
                 {qLive !== null && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                    <div style={{ width: 6, flexShrink: 0 }} />
-                    <div style={{ flex: 1, fontSize: 9, color: LIVE_COLOR }}>Live</div>
-                    <div style={{ fontSize: 11, fontFamily: "monospace", color: qColor(qLive) }}>Q{qLive}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12 }}>
+                    <span style={{ fontSize: 9, color: LIVE_COLOR, minWidth: 26 }}>Live</span>
+                    <div style={{ flex: 1, fontSize: 11, fontFamily: "monospace", color: qColor(qLive) }}>Q{qLive}</div>
                     <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: LIVE_COLOR }}>
                       {ptsLive}
                     </div>
