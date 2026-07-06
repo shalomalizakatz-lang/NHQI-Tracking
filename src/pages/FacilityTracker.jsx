@@ -382,7 +382,7 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled
     <div>
       <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Enter this facility's current full-year numbers to project its NHQI payment, compared against {dataset.year} actuals.</span>
+          <span>Enter this facility's current full-year numbers to project its NHQI payment against both the frozen {dataset.year} DOH cut points and a live NY-wide benchmark.</span>
           <button onClick={onReset} style={{ background: "#fff", border: "1px solid #99f6e4", borderRadius: 6, color: "#0d9488", fontSize: 11, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
             Reset
           </button>
