@@ -16,7 +16,7 @@ export default function Portfolio() {
     { key: "quintile2023", label: `${dataset.year} Quintile` },
     { key: "score2025", label: `Current Score (of ${TRACKABLE_MAX})` },
     { key: "quintile2027", label: "Est. Quintile" },
-    { key: "ptsDelta", label: "Pts Delta" },
+    { key: "ptsDelta", label: `Pts Delta (from ${dataset.year} DOH)` },
   ], [dataset.year]);
   const [portfolio, setPortfolio] = useState(() => { ensureSeedPortfolio(); return getPortfolio(); });
   const [sortKey, setSortKey] = useState("name");
