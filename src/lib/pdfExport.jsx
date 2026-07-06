@@ -63,8 +63,9 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
       const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
       const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
       const actionPlanLive = getActionPlan(m, gapInfoLive, census);
+      const ptGainLive = qLive && qLive > 1 ? table[qLive - 2] - table[qLive - 1] : 0;
 
-      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive };
+      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive, ptGainLive };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999))
@@ -182,7 +183,10 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
                   </Text>
                 )}
               </View>
-              <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts (DOH)</Text>
+                {x.qLive !== null && <Text style={{ fontSize: 7.5, fontWeight: 700, color: LIVE_PDF_COLOR }}>+{x.ptGainLive} pts (Live)</Text>}
+              </View>
             </View>
           ))
         )}

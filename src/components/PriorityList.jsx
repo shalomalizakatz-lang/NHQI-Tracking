@@ -26,8 +26,9 @@ export default function PriorityList({ dataset, facility, vals }) {
       const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
       const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
       const actionPlanLive = getActionPlan(m, gapInfoLive, census);
+      const ptGainLive = qLive && qLive > 1 ? table[qLive - 2] - table[qLive - 1] : 0;
 
-      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive };
+      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive, ptGainLive };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999));
@@ -88,6 +89,12 @@ export default function PriorityList({ dataset, facility, vals }) {
           <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
             <div style={{ fontSize: 9, color: "#16a34a" }}>pts (DOH)</div>
+            {x.qLive !== null && (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: LIVE_COLOR, fontFamily: "monospace", marginTop: 4 }}>+{x.ptGainLive}</div>
+                <div style={{ fontSize: 9, color: LIVE_COLOR }}>pts (Live)</div>
+              </>
+            )}
           </div>
         </div>
       ))}
