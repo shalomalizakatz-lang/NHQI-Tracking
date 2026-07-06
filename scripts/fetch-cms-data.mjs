@@ -30,10 +30,20 @@
 // Description" text (not by numeric measure code, which is more likely to have
 // drifted from memory) and against Provider Info column headers. Every match is
 // logged so a failed/partial run is diagnosable from the Actions log.
+//
+// Also computes a live NY-wide quintile benchmark for the quintile-scored
+// measures above (see computeLiveCutpoints below) — a statewide split of the
+// same facility population NHQI itself scores against, stored separately from
+// the frozen DOH cut points already bundled in src/data/nhqi_2023.json. This
+// is directional, not a DOH-certified figure: CMS and DOH use slightly
+// different denominators/risk-adjustment, and DOH's own cut points are
+// regionally adjusted for some measures (e.g. turnover) where this live
+// benchmark is a single statewide split.
 
 import { writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MEASURES } from "../src/lib/scoring.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = path.join(__dirname, "..", "src", "data", "cms_autofill.json");
@@ -181,6 +191,30 @@ function round1(v) {
   return Math.round(v * 10) / 10;
 }
 
+// Only measures actually scored via a 5-way quintile split in this app's own
+// model get a live benchmark — threshold-scored measures (falls, UTI,
+// contract staff) compare against a single fixed cutoff, not a distribution,
+// so a quintile boundary would never be consulted by getPoints() anyway.
+const QUINTILE_MEASURE_IDS = new Set(MEASURES.filter(m => m.scoring === "quintile").map(m => m.id));
+
+function percentile(sortedAsc, p) {
+  const idx = (sortedAsc.length - 1) * p;
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+  if (lower === upper) return sortedAsc[lower];
+  return sortedAsc[lower] + (sortedAsc[upper] - sortedAsc[lower]) * (idx - lower);
+}
+
+// Same boundary convention as the bundled DOH dataset's cutpoints arrays (see
+// getQuintile in src/lib/scoring.js): cutpoints[0] is the Q1/best threshold,
+// cutpoints[3] is the Q4→Q5 threshold. For higherIsBetter that's descending
+// (P80, P60, P40, P20); for lowerIsBetter it's ascending (P20, P40, P60, P80).
+function computeLiveCutpoints(values, higherIsBetter) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const ps = [0.2, 0.4, 0.6, 0.8].map(p => round1(percentile(sorted, p)));
+  return higherIsBetter ? ps.slice().reverse() : ps;
+}
+
 async function main() {
   const facilitiesDataset = JSON.parse(await readFile(FACILITIES_PATH, "utf8"));
   const ccnsWeCareAbout = new Set(facilitiesDataset.facilities.map(f => normalizeCcn(f.medicareNumber)).filter(Boolean));
@@ -299,11 +333,30 @@ async function main() {
     log("WARNING: could not locate Provider Info dataset at all.");
   }
 
+  // --- Live NY quintile boundaries (statewide benchmark, computed from the
+  // facility values already collected above — our bundled facility list IS
+  // all NY nursing homes, so this is the same population NHQI itself scores
+  // against, just not regionally split the way DOH's own cutpoints are).
+  const liveCutpoints = {};
+  for (const measureId of Object.keys(measures)) {
+    if (!QUINTILE_MEASURE_IDS.has(measureId)) continue;
+    const values = Object.values(measures[measureId]);
+    if (values.length < 10) {
+      log(`  liveCutpoints ${measureId}: skipped, only ${values.length} facility values (too few for a meaningful split)`);
+      continue;
+    }
+    const m = MEASURES.find(mm => mm.id === measureId);
+    const boundaries = computeLiveCutpoints(values, m.higherIsBetter);
+    liveCutpoints[measureId] = { boundaries, facilityCount: values.length };
+    log(`  liveCutpoints ${measureId}: boundaries=${JSON.stringify(boundaries)} (n=${values.length})`);
+  }
+
   const out = {
     generatedAt: new Date().toISOString(),
     source: "CMS Provider Data Catalog (data.cms.gov) — MDS Quality Measures & Provider Info datasets, matched by CMS Certification Number (CCN)",
     measures,
     census,
+    liveCutpoints,
   };
   await writeFile(OUT_PATH, JSON.stringify(out, null, 2) + "\n");
   log(`Wrote ${OUT_PATH}`);
