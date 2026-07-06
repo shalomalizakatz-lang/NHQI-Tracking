@@ -164,11 +164,33 @@ export default function FacilityTracker() {
             <>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Current Score (excl. PAH)</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <div>
+                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
+                  </div>
+                  {summary.score2025Live !== null && (
+                    <div>
+                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>{summary.score2025Live}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{summary.liveMax}</span></div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <div>
+                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
+                  </div>
+                  {summary.quintile2027Live !== null && (
+                    <div>
+                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>Q{summary.quintile2027Live}</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
