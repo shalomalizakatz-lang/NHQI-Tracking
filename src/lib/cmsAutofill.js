@@ -30,3 +30,16 @@ export const cmsAutofillMeta = {
   generatedAt: cmsData.generatedAt || null,
   source: cmsData.source || "CMS Care Compare (data.cms.gov)",
 };
+
+// Live NY-wide quintile boundaries computed from real CMS facility data (see
+// computeLiveCutpoints in scripts/fetch-cms-data.mjs) — a directional
+// benchmark alongside the frozen DOH cut points in src/data/nhqi_2023.json,
+// not a DOH-certified figure. Same array shape as getCutpoints() in
+// scoring.js, so getQuintile()/getPoints() work unchanged against either.
+export function getLiveCutpoints(measureId) {
+  return cmsData.liveCutpoints?.[measureId]?.boundaries || null;
+}
+
+export function getLiveCutpointsFacilityCount(measureId) {
+  return cmsData.liveCutpoints?.[measureId]?.facilityCount ?? null;
+}
