@@ -56,7 +56,14 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
       const table = m.scoring === "quintile_pah" ? [10, 8, 6, 2, 0] : [5, 3, 1, 0, 0];
       const ptGain = q ? table[q - 2] - table[q - 1] : 0;
       const actionPlan = getActionPlan(m, gapInfo, census);
-      return { m, q, gapInfo, ptGain, actionPlan };
+
+      // Live cut-point target, same as PriorityList.jsx's in-app display —
+      // only exists for quintile-scored measures with a live split available.
+      const liveCutpoints = m.scoring === "quintile" ? getLiveCutpoints(m.id) : null;
+      const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
+      const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
+
+      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999))
@@ -162,7 +169,17 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
           priorities.map((x, i) => (
             <View key={x.m.id} style={styles.priorityRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 8 }}>{pdfSafe(`#${i + 1} ${x.m.short} — Q${x.q} → Q${x.q - 1}${x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}`)}</Text>
+                <Text style={{ fontSize: 8 }}>{pdfSafe(`#${i + 1} ${x.m.short}`)}</Text>
+                <Text style={{ fontSize: 7.5, color: "#374151" }}>
+                  {pdfSafe(`DOH: Q${x.q} → Q${x.q - 1}${x.gapInfo ? ` (need ${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfo.target})` : ""}`)}
+                </Text>
+                {x.qLive !== null && (
+                  <Text style={{ fontSize: 7.5, color: LIVE_PDF_COLOR }}>
+                    {pdfSafe(x.qLive > 1
+                      ? `Live: Q${x.qLive} → Q${x.qLive - 1}${x.gapInfoLive ? ` (need ${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}, target ${x.gapInfoLive.target})` : ""}`
+                      : `Live: Q${x.qLive} (already top quintile)`)}
+                  </Text>
+                )}
                 {x.actionPlan && <Text style={{ fontSize: 7.5, color: "#374151", marginTop: 1 }}>{pdfSafe(x.actionPlan)}</Text>}
               </View>
               <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
