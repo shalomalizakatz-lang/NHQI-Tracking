@@ -26,8 +26,9 @@ export default function PriorityList({ dataset, facility, vals }) {
       const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
       const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
       const actionPlanLive = getActionPlan(m, gapInfoLive, census);
+      const ptGainLive = qLive && qLive > 1 ? table[qLive - 2] - table[qLive - 1] : 0;
 
-      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive };
+      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive, ptGainLive };
     })
     .filter(x => x.q && x.q > 1)
     .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999));
@@ -59,53 +60,46 @@ export default function PriorityList({ dataset, facility, vals }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 600, marginBottom: 4 }}>{x.m.short}{x.m.pointsApproximate ? " ⚠" : ""}</div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12, marginBottom: 2 }}>
               <span style={{ fontSize: 9, color: "#94a3b8", minWidth: 26 }}>DOH:</span>
-              <span style={{ fontSize: 10, background: qColor(x.q) + "14", color: qColor(x.q), border: `1px solid ${qColor(x.q)}40`, padding: "1px 6px", borderRadius: 99 }}>Q{x.q} now</span>
-              <span style={{ fontSize: 10, color: "#cbd5e1" }}>→</span>
-              <span style={{ fontSize: 10, background: qColor(x.q - 1) + "14", color: qColor(x.q - 1), border: `1px solid ${qColor(x.q - 1)}40`, padding: "1px 6px", borderRadius: 99 }}>Q{x.q - 1} target</span>
+              <span style={{ color: qColor(x.q), fontWeight: 600 }}>Q{x.q} → Q{x.q - 1}</span>
+              <span style={{ color: "#d97706" }}>
+                {x.m.higherIsBetter ? "↑" : "↓"} need {x.gapInfo ? `${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} (target ${x.gapInfo.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`})` : "—"}
+                {x.actionPlan ? ` · ${x.actionPlan}` : ""}
+              </span>
             </div>
-            <div style={{ fontSize: 12, color: "#d97706" }}>
-              {x.m.higherIsBetter ? "↑" : "↓"} Need {x.gapInfo ? `${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} improvement` : "—"}
-              {x.gapInfo ? ` · target ${x.gapInfo.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}` : ""}
-            </div>
-            {x.actionPlan && (
-              <div style={{ fontSize: 12, color: "#0f172a", fontWeight: 600, marginBottom: 6 }}>
-                → {x.actionPlan}
-              </div>
-            )}
 
             {x.qLive !== null && (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 9, color: LIVE_COLOR, minWidth: 26 }}>Live:</span>
-                  <span style={{ fontSize: 10, background: qColor(x.qLive) + "14", color: qColor(x.qLive), border: `1px solid ${qColor(x.qLive)}40`, padding: "1px 6px", borderRadius: 99 }}>Q{x.qLive} now</span>
-                  {x.qLive > 1 ? (
-                    <>
-                      <span style={{ fontSize: 10, color: "#cbd5e1" }}>→</span>
-                      <span style={{ fontSize: 10, background: qColor(x.qLive - 1) + "14", color: qColor(x.qLive - 1), border: `1px solid ${qColor(x.qLive - 1)}40`, padding: "1px 6px", borderRadius: 99 }}>Q{x.qLive - 1} target</span>
-                    </>
-                  ) : (
-                    <span style={{ fontSize: 10, color: "#16a34a" }}>already top quintile</span>
-                  )}
-                </div>
-                {x.qLive > 1 && (
-                  <div style={{ fontSize: 12, color: LIVE_COLOR }}>
-                    {x.m.higherIsBetter ? "↑" : "↓"} Need {x.gapInfoLive ? `${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} improvement` : "—"}
-                    {x.gapInfoLive ? ` · target ${x.gapInfoLive.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`}` : ""}
-                  </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
+                <span style={{ fontSize: 9, color: LIVE_COLOR, minWidth: 26 }}>Live:</span>
+                {x.qLive > 1 ? (
+                  <>
+                    <span style={{ color: qColor(x.qLive), fontWeight: 600 }}>Q{x.qLive} → Q{x.qLive - 1}</span>
+                    <span style={{ color: LIVE_COLOR }}>
+                      {x.m.higherIsBetter ? "↑" : "↓"} need {x.gapInfoLive ? `${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} (target ${x.gapInfoLive.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`})` : "—"}
+                      {x.actionPlanLive ? ` · ${x.actionPlanLive}` : ""}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ color: qColor(x.qLive), fontWeight: 600 }}>Q{x.qLive} — already top quintile</span>
                 )}
-                {x.qLive > 1 && x.actionPlanLive && (
-                  <div style={{ fontSize: 12, color: LIVE_COLOR, fontWeight: 600 }}>
-                    → {x.actionPlanLive}
-                  </div>
-                )}
-              </>
+              </div>
             )}
           </div>
           <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
-            <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
+            {x.qLive !== null && x.ptGainLive !== x.ptGain ? (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
+                <div style={{ fontSize: 9, color: "#16a34a" }}>pts (DOH)</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: LIVE_COLOR, fontFamily: "monospace", marginTop: 4 }}>+{x.ptGainLive}</div>
+                <div style={{ fontSize: 9, color: LIVE_COLOR }}>pts (Live)</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
+                <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
+              </>
+            )}
           </div>
         </div>
       ))}
