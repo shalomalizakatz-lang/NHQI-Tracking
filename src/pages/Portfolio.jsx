@@ -15,8 +15,7 @@ export default function Portfolio() {
     { key: "score2023", label: `${dataset.year} Score` },
     { key: "quintile2023", label: `${dataset.year} Quintile` },
     { key: "score2025", label: `Current Score (of ${TRACKABLE_MAX})` },
-    { key: "quintile2027", label: "Est. Quintile (DOH)" },
-    { key: "quintile2027Live", label: "Est. Quintile (Live)" },
+    { key: "quintile2027", label: "Est. Quintile" },
     { key: "ptsDelta", label: "Pts Delta" },
   ], [dataset.year]);
   const [portfolio, setPortfolio] = useState(() => { ensureSeedPortfolio(); return getPortfolio(); });
@@ -115,9 +114,14 @@ export default function Portfolio() {
                   </td>
                   <td className="px-4 py-3 font-mono text-slate-500">{r.score2023}/90</td>
                   <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2023} /></td>
-                  <td className="px-4 py-3 font-mono text-slate-500">{r.score2025 !== null ? `${r.score2025}/${TRACKABLE_MAX}` : "—"}</td>
-                  <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2027} /></td>
-                  <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2027Live} /></td>
+                  <td className="px-4 py-3 font-mono text-slate-500">
+                    <div><span className="text-[10px] text-slate-400 font-sans mr-1">DOH</span>{r.score2025 !== null ? `${r.score2025}/${TRACKABLE_MAX}` : "—"}</div>
+                    {r.score2025Live !== null && <div className="text-purple-600"><span className="text-[10px] font-sans mr-1">Live</span>{r.score2025Live}/{r.liveMax}</div>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1"><span className="text-[10px] text-slate-400">DOH</span><QuintileBadge quintile={r.quintile2027} /></div>
+                    {r.quintile2027Live !== null && <div className="flex items-center gap-1 mt-1"><span className="text-[10px] text-purple-600">Live</span><QuintileBadge quintile={r.quintile2027Live} /></div>}
+                  </td>
                   <td className="px-4 py-3 font-mono">
                     {r.ptsDelta !== null ? (
                       <span className={r.ptsDelta > 0 ? "text-green-600" : r.ptsDelta < 0 ? "text-red-600" : "text-slate-400"}>
@@ -142,7 +146,7 @@ export default function Portfolio() {
       </div>
 
       <div className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed">
-        {dataset.year} Score is out of 90. Current Score is out of {TRACKABLE_MAX} — it excludes PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta doesn't just subtract these two numbers (that would unfairly count PAH's missing points as a loss) — it removes PAH's points from the {dataset.year} score first, then compares that adjusted number to the Current Score, so both sides are measured on the same {TRACKABLE_MAX}-point basis. Est. Quintile (DOH) ranks the Current Score against the frozen {dataset.year} DOH cut points; Est. Quintile (Live) ranks the same entered numbers against a live NY-wide benchmark instead — a directional second opinion, not a DOH-certified figure. Both are directional — actual placement depends on that year's statewide distribution.
+        {dataset.year} Score is out of 90. Current Score and Est. Quintile each show two rows — DOH ranks your entered numbers against the frozen {dataset.year} DOH cut points, Live ranks the same numbers against a live NY-wide benchmark instead (a directional second opinion, not a DOH-certified figure). Both exclude PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta compares the {dataset.year} score to Current Score (DOH) specifically — it doesn't just subtract the two numbers (that would unfairly count PAH's missing points as a loss), it removes PAH's points from the {dataset.year} score first so both sides are measured on the same {TRACKABLE_MAX}-point basis. All projections are directional — actual placement depends on that year's statewide distribution.
       </div>
     </div>
   );
