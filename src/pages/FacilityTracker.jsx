@@ -4,7 +4,7 @@ import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
 import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
 import { qColor, ptsColor } from "../lib/colors.js";
-import { getAutofillValue, cmsAutofillMeta } from "../lib/cmsAutofill.js";
+import { getAutofillValue, cmsAutofillMeta, getLiveCutpoints } from "../lib/cmsAutofill.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
 import { downloadFacilityPdf } from "../lib/pdfExport.jsx";
@@ -103,8 +103,9 @@ export default function FacilityTracker() {
   const setBinary = (id, v) => setBinaryVals(p => ({ ...p, [id]: v }));
 
   const displayName = portfolioEntry?.displayName || facility.name;
-  const summary = computeFacilitySummary(dataset, facility, { vals, starVals, binaryVals });
+  const summary = computeFacilitySummary(dataset, facility, { vals, starVals, binaryVals }, getLiveCutpoints);
   const qc = summary.quintile2027 !== null ? qColor(summary.quintile2027) : "#94a3b8";
+  const qcLive = summary.quintile2027Live !== null ? qColor(summary.quintile2027Live) : "#94a3b8";
 
   function handleRename() {
     if (nameDraft.trim()) renameFacility(facilityId, nameDraft.trim());
@@ -188,7 +189,7 @@ export default function FacilityTracker() {
 
       <div style={{ padding: "20px 22px", maxWidth: 820, margin: "0 auto" }}>
         {tab === "dashboard" && (
-          <DashboardTab dataset={dataset} facility={facility} summary={summary} vals={vals} starVals={starVals} binaryVals={binaryVals} qc={qc} />
+          <DashboardTab dataset={dataset} facility={facility} summary={summary} vals={vals} starVals={starVals} binaryVals={binaryVals} qc={qc} qcLive={qcLive} />
         )}
         {tab === "measures" && (
           <MeasuresTab dataset={dataset} facility={facility} vals={vals} starVals={starVals} binaryVals={binaryVals} autoFilled={autoFilled}
@@ -196,12 +197,18 @@ export default function FacilityTracker() {
         )}
         {tab === "priority" && (
           <div>
-            <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
+            <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 8, fontSize: 13, color: "#115e59" }}>
               {dataset.year}: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; Current: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; Current (DOH cut points): <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
             </div>
+            {summary.score2025Live !== null && (
+              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#5b21b6" }}>
+                Current (live CMS benchmark): <strong style={{ color: qcLive }}>{summary.score2025Live}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027Live}</strong>
+                <span style={{ fontSize: 11, color: "#8b5cf6", marginLeft: 8 }}>directional, not DOH-certified — see Live CMS Projection on each measure below</span>
+              </div>
+            )}
             <PriorityList dataset={dataset} facility={facility} vals={vals} />
           </div>
         )}
@@ -210,7 +217,7 @@ export default function FacilityTracker() {
   );
 }
 
-function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, qc }) {
+function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, qc, qcLive }) {
   const bySection = key => MEASURES.filter(m => m.section === key);
 
   return (
@@ -219,7 +226,8 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
         {[
           { label: `${dataset.year} Actual Score`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#475569" },
           { label: "Current Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
-          { label: "Est. Quintile", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
+          { label: "Est. Quintile (DOH)", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
+          { label: "Est. Quintile (Live CMS)", val: summary.quintile2027Live !== null ? `Q${summary.quintile2027Live}` : "—", sub: summary.score2025Live !== null ? `${summary.score2025Live}/${TRACKABLE_MAX} pts vs. live NY benchmark` : "Enter current data", color: qcLive },
         ].map(c => (
           <div key={c.label} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
@@ -297,7 +305,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. Est. results are directional, not guaranteed.
+        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. Est. Quintile (DOH) uses the frozen {dataset.year} DOH cut points; Est. Quintile (Live CMS) re-scores the same entries against a live NY-wide benchmark computed from current CMS data — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
       </div>
     </div>
   );
