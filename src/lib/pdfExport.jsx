@@ -133,7 +133,11 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
             const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
             const liveCutpoints = (!m.notTrackable && m.scoring === "quintile") ? getLiveCutpoints(m.id) : null;
             const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
-            const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : null;
+            // No live benchmark exists for this measure (threshold/star/binary
+            // scoring, or a quintile measure with no CMS data) — same rule
+            // applies in both worlds, so DOH points carry over unchanged,
+            // matching computeFacilitySummary's live-track fallback.
+            const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : (m.notTrackable ? null : pts25);
             const val2025Display = m.notTrackable ? "not trackable" : (vals[m.id] || starVals[m.id] || binaryVals[m.id] || "—");
             return (
               <View key={m.id} style={styles.tRow}>

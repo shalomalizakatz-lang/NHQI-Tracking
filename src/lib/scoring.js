@@ -235,12 +235,15 @@ export function getDisplayed2025Points(dataset, facility, m, vals, starVals, bin
 // also stripping PAH out of the 2023 side.
 //
 // `getLiveCutpoints` is the caller's cmsAutofill.js lookup (see module note
-// above). The live track scores the SAME entered `vals` as the DOH track —
+// above). The live track scores the SAME entered `vals` as the DOH track,
+// out of the SAME TRACKABLE_MAX total, so the two are directly comparable —
 // just ranked against the live NY-wide cut points instead of the frozen DOH
-// ones — so quintile2027Live is "where would these same numbers rank under
-// today's statewide benchmark." liveMax is fixed per how many trackable
-// measures currently have a live cut-point split available (not per-facility
-// data completeness), the same way TRACKABLE_MAX is fixed for the DOH track.
+// ones wherever a live split actually exists. For measures with no live
+// equivalent (threshold/star/binary scoring, which aren't quintile splits at
+// all, or a quintile measure with no CMS data to derive a split from — e.g.
+// staff flu vaccination), the DOH-computed points carry over into the live
+// total unchanged: there's no "live version" of a pass/fail threshold or a
+// five-star rating, so both tracks agree on those measures by construction.
 export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoints) {
   const score2023 = facility.totalScore ?? totalFromActuals(facility.actuals);
   const quintile2023 = facility.overallQuintile ?? null;
@@ -253,21 +256,21 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
   const binaryVals = inputs?.binaryVals ?? {};
 
   let score2025 = 0, entered = 0;
-  let score2025Live = 0, liveMax = 0;
+  let score2025Live = 0;
   for (const m of TRACKABLE_MEASURES) {
     const cutpoints = getCutpoints(dataset, m.id, facility.region);
     const p = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
     if (p !== null) { score2025 += p; entered++; }
 
-    if (m.scoring === "quintile" && getLiveCutpoints) {
-      const liveCutpoints = getLiveCutpoints(m.id);
-      if (liveCutpoints) {
-        liveMax += m.maxPts;
-        const pLive = getPoints(m, vals[m.id], null, null, liveCutpoints);
-        if (pLive !== null) score2025Live += pLive;
-      }
+    const liveCutpoints = (m.scoring === "quintile" && getLiveCutpoints) ? getLiveCutpoints(m.id) : null;
+    if (liveCutpoints) {
+      const pLive = getPoints(m, vals[m.id], null, null, liveCutpoints);
+      if (pLive !== null) score2025Live += pLive;
+    } else if (p !== null) {
+      score2025Live += p;
     }
   }
+  const liveMax = TRACKABLE_MAX;
 
   const hasEntries = entered > 0;
   const round1 = n => Math.round(n * 10) / 10;
@@ -278,11 +281,12 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
     entered,
     quintile2027: hasEntries ? estimateQuintile(score2025, TRACKABLE_MAX) : null,
     ptsDelta: hasEntries ? round1(score2025 - score2023Trackable) : null,
-    // "Live" track: same entered values, ranked against the live NY-wide
-    // quintile benchmark instead of the frozen DOH cut points — a directional
-    // second opinion, not a DOH-certified figure.
-    score2025Live: hasEntries && liveMax > 0 ? score2025Live : null,
+    // "Live" track: same entered values and same total (TRACKABLE_MAX), just
+    // ranked against the live NY-wide quintile benchmark instead of the frozen
+    // DOH cut points wherever a live split exists — a directional second
+    // opinion, not a DOH-certified figure.
+    score2025Live: hasEntries ? score2025Live : null,
     liveMax,
-    quintile2027Live: hasEntries && liveMax > 0 ? estimateQuintile(score2025Live, liveMax) : null,
+    quintile2027Live: hasEntries ? estimateQuintile(score2025Live, liveMax) : null,
   };
 }
