@@ -43,3 +43,12 @@ export function getLiveCutpoints(measureId) {
 export function getLiveCutpointsFacilityCount(measureId) {
   return cmsData.liveCutpoints?.[measureId]?.facilityCount ?? null;
 }
+
+// Statewide average value across the same NY facility population the live
+// cut points are computed from — "the average you're up against", shown
+// alongside the live quintile boundaries rather than any one facility's own
+// number, since the point of this panel is the benchmark, not a repeat of
+// data already visible in the Current Full-Year input.
+export function getLiveAverage(measureId) {
+  return cmsData.liveCutpoints?.[measureId]?.average ?? null;
+}

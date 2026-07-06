@@ -215,6 +215,10 @@ function computeLiveCutpoints(values, higherIsBetter) {
   return higherIsBetter ? ps.slice().reverse() : ps;
 }
 
+function average(values) {
+  return round1(values.reduce((a, v) => a + v, 0) / values.length);
+}
+
 async function main() {
   const facilitiesDataset = JSON.parse(await readFile(FACILITIES_PATH, "utf8"));
   const ccnsWeCareAbout = new Set(facilitiesDataset.facilities.map(f => normalizeCcn(f.medicareNumber)).filter(Boolean));
@@ -347,8 +351,9 @@ async function main() {
     }
     const m = MEASURES.find(mm => mm.id === measureId);
     const boundaries = computeLiveCutpoints(values, m.higherIsBetter);
-    liveCutpoints[measureId] = { boundaries, facilityCount: values.length };
-    log(`  liveCutpoints ${measureId}: boundaries=${JSON.stringify(boundaries)} (n=${values.length})`);
+    const avg = average(values);
+    liveCutpoints[measureId] = { boundaries, facilityCount: values.length, average: avg };
+    log(`  liveCutpoints ${measureId}: boundaries=${JSON.stringify(boundaries)} average=${avg} (n=${values.length})`);
   }
 
   const out = {
