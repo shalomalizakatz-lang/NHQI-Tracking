@@ -203,7 +203,7 @@ export default function FacilityTracker() {
                 <span> &nbsp;·&nbsp; Current (DOH cut points): <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
               {summary.quintile2027Live !== null && (
-                <span> &nbsp;·&nbsp; Live cut points: <strong style={{ color: qcLive }}>est. Q{summary.quintile2027Live}</strong></span>
+                <span> &nbsp;·&nbsp; Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>
               )}
             </div>
             <PriorityList dataset={dataset} facility={facility} vals={vals} />
@@ -229,6 +229,9 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <div style={{ fontSize: 26, fontWeight: 700, color: c.color, fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>{c.val}</div>
+              {c.key === "current" && summary.score2025Live !== null && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: qcLive, background: qcLive + "14", border: `1px solid ${qcLive}40`, borderRadius: 99, padding: "2px 7px" }}>Live {summary.score2025Live}/{summary.liveMax}</span>
+              )}
               {c.key === "quintile" && summary.quintile2027Live !== null && (
                 <span style={{ fontSize: 11, fontWeight: 600, color: qcLive, background: qcLive + "14", border: `1px solid ${qcLive}40`, borderRadius: 99, padding: "2px 7px" }}>Live Q{summary.quintile2027Live}</span>
               )}
