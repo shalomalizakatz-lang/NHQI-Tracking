@@ -87,12 +87,17 @@ export default function PriorityList({ dataset, facility, vals }) {
             )}
           </div>
           <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
-            <div style={{ fontSize: 9, color: "#16a34a" }}>pts (DOH)</div>
-            {x.qLive !== null && (
+            {x.qLive !== null && x.ptGainLive !== x.ptGain ? (
               <>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
+                <div style={{ fontSize: 9, color: "#16a34a" }}>pts (DOH)</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: LIVE_COLOR, fontFamily: "monospace", marginTop: 4 }}>+{x.ptGainLive}</div>
                 <div style={{ fontSize: 9, color: LIVE_COLOR }}>pts (Live)</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
+                <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
               </>
             )}
           </div>

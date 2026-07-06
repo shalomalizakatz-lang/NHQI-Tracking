@@ -184,8 +184,14 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
                 )}
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts (DOH)</Text>
-                {x.qLive !== null && <Text style={{ fontSize: 7.5, fontWeight: 700, color: LIVE_PDF_COLOR }}>+{x.ptGainLive} pts (Live)</Text>}
+                {x.qLive !== null && x.ptGainLive !== x.ptGain ? (
+                  <>
+                    <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts (DOH)</Text>
+                    <Text style={{ fontSize: 7.5, fontWeight: 700, color: LIVE_PDF_COLOR }}>+{x.ptGainLive} pts (Live)</Text>
+                  </>
+                ) : (
+                  <Text style={{ fontSize: 8, fontWeight: 700, color: "#15803d" }}>+{x.ptGain} pts</Text>
+                )}
               </View>
             </View>
           ))
