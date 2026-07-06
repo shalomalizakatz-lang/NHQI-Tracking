@@ -40,6 +40,3 @@ export function getLiveCutpoints(measureId) {
   return cmsData.liveCutpoints?.[measureId]?.boundaries || null;
 }
 
-export function getLiveCutpointsFacilityCount(measureId) {
-  return cmsData.liveCutpoints?.[measureId]?.facilityCount ?? null;
-}

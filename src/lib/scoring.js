@@ -224,25 +224,6 @@ export function getDisplayed2025Points(dataset, facility, m, vals, starVals, bin
   return getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
 }
 
-// Cut points for the "live CMS" track: the live NY-wide quintile split where
-// one exists (quintile-scored measures with public CMS data), otherwise the
-// same DOH cut points used for the official track — threshold/star/binary
-// measures aren't quintile-split at all, and flu_vax_staff has no public CMS
-// source to derive a live split from, so there's nothing to swap in for them.
-// `getLiveCutpoints` is the caller's cmsAutofill.js lookup (see module note above).
-export function getLiveOrDohCutpoints(dataset, measureId, region, getLiveCutpoints) {
-  const live = getLiveCutpoints ? getLiveCutpoints(measureId) : null;
-  return live || getCutpoints(dataset, measureId, region);
-}
-
-// Live-track counterpart to getDisplayed2025Points — same entered value,
-// scored against getLiveOrDohCutpoints instead of the frozen DOH cut points.
-export function getDisplayed2025PointsLive(dataset, facility, m, vals, starVals, binaryVals, getLiveCutpoints) {
-  if (m.notTrackable) return null;
-  const cutpoints = getLiveOrDohCutpoints(dataset, m.id, facility.region, getLiveCutpoints);
-  return getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
-}
-
 // Computes a facility's 2023 actual vs. entered full-year projection summary,
 // used by both the Portfolio table and the per-facility Dashboard tab.
 //
@@ -252,6 +233,14 @@ export function getDisplayed2025PointsLive(dataset, facility, m, vals, starVals,
 // misrepresent both the projected total and the improvement delta. So score2025
 // is out of TRACKABLE_MAX (80, not 90), and ptsDelta compares like-for-like by
 // also stripping PAH out of the 2023 side.
+//
+// `getLiveCutpoints` is the caller's cmsAutofill.js lookup (see module note
+// above). The live track scores the SAME entered `vals` as the DOH track —
+// just ranked against the live NY-wide cut points instead of the frozen DOH
+// ones — so quintile2027Live is "where would these same numbers rank under
+// today's statewide benchmark." liveMax is fixed per how many trackable
+// measures currently have a live cut-point split available (not per-facility
+// data completeness), the same way TRACKABLE_MAX is fixed for the DOH track.
 export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoints) {
   const score2023 = facility.totalScore ?? totalFromActuals(facility.actuals);
   const quintile2023 = facility.overallQuintile ?? null;
@@ -263,15 +252,21 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
   const starVals = inputs?.starVals ?? {};
   const binaryVals = inputs?.binaryVals ?? {};
 
-  let score2025 = 0, score2025Live = 0, entered = 0;
+  let score2025 = 0, entered = 0;
+  let score2025Live = 0, liveMax = 0;
   for (const m of TRACKABLE_MEASURES) {
     const cutpoints = getCutpoints(dataset, m.id, facility.region);
     const p = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
     if (p !== null) { score2025 += p; entered++; }
 
-    const liveCutpoints = getLiveOrDohCutpoints(dataset, m.id, facility.region, getLiveCutpoints);
-    const pLive = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints);
-    if (pLive !== null) score2025Live += pLive;
+    if (m.scoring === "quintile" && getLiveCutpoints) {
+      const liveCutpoints = getLiveCutpoints(m.id);
+      if (liveCutpoints) {
+        liveMax += m.maxPts;
+        const pLive = getPoints(m, vals[m.id], null, null, liveCutpoints);
+        if (pLive !== null) score2025Live += pLive;
+      }
+    }
   }
 
   const hasEntries = entered > 0;
@@ -283,10 +278,11 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
     entered,
     quintile2027: hasEntries ? estimateQuintile(score2025, TRACKABLE_MAX) : null,
     ptsDelta: hasEntries ? round1(score2025 - score2023Trackable) : null,
-    // "Live" track: same entered values, scored against the live NY-wide CMS
-    // benchmark instead of the frozen 2023 DOH cut points (see
-    // getLiveOrDohCutpoints) — a directional second opinion, not DOH-certified.
-    score2025Live: hasEntries ? score2025Live : null,
-    quintile2027Live: hasEntries ? estimateQuintile(score2025Live, TRACKABLE_MAX) : null,
+    // "Live" track: same entered values, ranked against the live NY-wide
+    // quintile benchmark instead of the frozen DOH cut points — a directional
+    // second opinion, not a DOH-certified figure.
+    score2025Live: hasEntries && liveMax > 0 ? score2025Live : null,
+    liveMax,
+    quintile2027Live: hasEntries && liveMax > 0 ? estimateQuintile(score2025Live, liveMax) : null,
   };
 }

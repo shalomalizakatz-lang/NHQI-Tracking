@@ -197,18 +197,15 @@ export default function FacilityTracker() {
         )}
         {tab === "priority" && (
           <div>
-            <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 8, fontSize: 13, color: "#115e59" }}>
+            <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
               {dataset.year}: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
                 <span> &nbsp;·&nbsp; Current (DOH cut points): <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
+              {summary.quintile2027Live !== null && (
+                <span> &nbsp;·&nbsp; Live cut points: <strong style={{ color: qcLive }}>est. Q{summary.quintile2027Live}</strong></span>
+              )}
             </div>
-            {summary.score2025Live !== null && (
-              <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#5b21b6" }}>
-                Current (live CMS benchmark): <strong style={{ color: qcLive }}>{summary.score2025Live}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027Live}</strong>
-                <span style={{ fontSize: 11, color: "#8b5cf6", marginLeft: 8 }}>directional, not DOH-certified — see Live CMS Projection on each measure below</span>
-              </div>
-            )}
             <PriorityList dataset={dataset} facility={facility} vals={vals} />
           </div>
         )}
@@ -224,14 +221,18 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
-          { label: `${dataset.year} Actual Score`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#475569" },
-          { label: "Current Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
-          { label: "Est. Quintile (DOH)", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
-          { label: "Est. Quintile (Live CMS)", val: summary.quintile2027Live !== null ? `Q${summary.quintile2027Live}` : "—", sub: summary.score2025Live !== null ? `${summary.score2025Live}/${TRACKABLE_MAX} pts vs. live NY benchmark` : "Enter current data", color: qcLive },
+          { key: "actual", label: `${dataset.year} Actual Score`, val: `${summary.score2023}/90`, sub: `Actual · drove ${dataset.year} payment`, color: "#475569" },
+          { key: "current", label: "Current Score (excl. PAH)", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data", color: "#0d9488" },
+          { key: "quintile", label: "Est. Quintile", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", sub: summary.quintile2027 !== null ? (summary.quintile2027 <= 3 ? "Quality Pool: positive" : "Quality Pool: negative") : "Projected from current rates", color: qc },
         ].map(c => (
-          <div key={c.label} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
+          <div key={c.key} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
             <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: c.color, fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>{c.val}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <div style={{ fontSize: 26, fontWeight: 700, color: c.color, fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>{c.val}</div>
+              {c.key === "quintile" && summary.quintile2027Live !== null && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: qcLive, background: qcLive + "14", border: `1px solid ${qcLive}40`, borderRadius: 99, padding: "2px 7px" }}>Live Q{summary.quintile2027Live}</span>
+              )}
+            </div>
             <div style={{ fontSize: 12, color: "#94a3b8" }}>{c.sub}</div>
           </div>
         ))}
@@ -305,7 +306,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. Est. Quintile (DOH) uses the frozen {dataset.year} DOH cut points; Est. Quintile (Live CMS) re-scores the same entries against a live NY-wide benchmark computed from current CMS data — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
+        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
       </div>
     </div>
   );
