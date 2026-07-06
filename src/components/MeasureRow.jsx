@@ -1,6 +1,6 @@
 import { getQuintile, getPoints, getGapToNext } from "../lib/scoring.js";
 import { qColor, ptsColor, deltaColor, deltaArrow } from "../lib/colors.js";
-import { getLiveCutpoints, getLiveCutpointsFacilityCount } from "../lib/cmsAutofill.js";
+import { getLiveCutpoints, getLiveCutpointsFacilityCount, getAutofillValue } from "../lib/cmsAutofill.js";
 
 const LIVE_COLOR = "#6d28d9";
 
@@ -15,16 +15,21 @@ function liveUnavailableNote(m) {
   return null;
 }
 
-export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year, isAutofilled }) {
+export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryVal, onValChange, onStarChange, onBinaryChange, year, isAutofilled, medicareNumber }) {
   if (m.notTrackable) return <NotTrackableMeasureRow m={m} actual={actual} year={year} />;
 
   const liveCutpoints = m.scoring === "quintile" ? getLiveCutpoints(m.id) : null;
   const hasLive = !!liveCutpoints;
   const liveCount = hasLive ? getLiveCutpointsFacilityCount(m.id) : null;
+  // The facility's actual current CMS Care Compare value — independent of
+  // whatever the user has typed into Current Full-Year — is what makes this
+  // a real live benchmark rather than just re-scoring the user's own input.
+  const liveVal = hasLive ? getAutofillValue(m.id, medicareNumber) : null;
+  const hasLiveVal = liveVal !== null && liveVal !== undefined;
 
   const q2025 = (m.scoring === "quintile" || m.scoring === "quintile_pah") ? getQuintile(m, val, cutpoints) : null;
-  const qLive = hasLive ? getQuintile(m, val, liveCutpoints) : null;
-  const ptsLive = hasLive ? getPoints(m, val, starVal, binaryVal, liveCutpoints) : null;
+  const qLive = hasLiveVal ? getQuintile(m, liveVal, liveCutpoints) : null;
+  const ptsLive = hasLiveVal ? getPoints(m, liveVal, null, null, liveCutpoints) : null;
   const pts2025 = getPoints(m, val, starVal, binaryVal, cutpoints);
   const hasVal = val !== "" && val !== null && val !== undefined;
   const gapInfo = (m.scoring === "quintile" || m.scoring === "quintile_pah") && q2025 && q2025 > 1
@@ -101,11 +106,11 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
 
         {hasLive && (
           <div style={{ background: "#f5f3ff", borderRadius: 8, padding: "10px 12px", flex: "1 1 150px", minWidth: 150 }}>
-            <div style={{ fontSize: 10, color: LIVE_COLOR, letterSpacing: "0.03em", marginBottom: 4 }}>LIVE CMS PROJECTION</div>
-            {hasVal ? (
+            <div style={{ fontSize: 10, color: LIVE_COLOR, letterSpacing: "0.03em", marginBottom: 4 }}>LIVE CMS (data.cms.gov)</div>
+            {hasLiveVal ? (
               <>
                 <div style={{ fontSize: 20, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1, marginBottom: 4 }}>
-                  {val}<span style={{ fontSize: 11, color: "#94a3b8" }}>{m.unit}</span>
+                  {liveVal}<span style={{ fontSize: 11, color: "#94a3b8" }}>{m.unit}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   {qLive && (
@@ -115,9 +120,9 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: 10, color: "#c4b5fd", marginBottom: 4 }}>enter current value to compare</div>
+              <div style={{ fontSize: 10, color: "#c4b5fd", marginBottom: 4 }}>no current CMS data for this facility</div>
             )}
-            <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 4 }}>vs. {liveCount} NY facilities · directional, not DOH-certified</div>
+            <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 4 }}>this facility's actual current CMS value, scored vs. {liveCount} NY facilities · directional, not DOH-certified</div>
           </div>
         )}
 
