@@ -181,6 +181,11 @@ export default function FacilityTracker() {
                     </div>
                   )}
                 </div>
+                {summary.ptsDelta !== null && (
+                  <div style={{ fontSize: 10, marginTop: 2, color: summary.ptsDelta > 0 ? "#16a34a" : summary.ptsDelta < 0 ? "#dc2626" : "#94a3b8" }}>
+                    {summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} pts vs {dataset.year} (excl. PAH)
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
@@ -230,7 +235,7 @@ export default function FacilityTracker() {
               )}
               {dataset.year} actual: <strong>{summary.score2023}/100 → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; vs. DOH 2023 cut points: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; vs. DOH 2023 cut points: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts ({summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} vs {dataset.year}, excl. PAH) → est. Q{summary.quintile2027}</strong></span>
               )}
               {summary.quintile2027Live !== null && (
                 <span> &nbsp;·&nbsp; vs. Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>

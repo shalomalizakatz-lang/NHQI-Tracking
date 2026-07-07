@@ -104,6 +104,11 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
               )}
             </View>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>{summary.entered}/{TRACKABLE_MEASURES.length} trackable measures entered</Text>
+            {summary.ptsDelta !== null && (
+              <Text style={{ fontSize: 7, color: summary.ptsDelta > 0 ? "#15803d" : summary.ptsDelta < 0 ? "#b91c1c" : "#6b7280" }}>
+                {pdfSafe(`${summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} pts vs ${dataset.year} (excl. PAH)`)}
+              </Text>
+            )}
           </View>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Est. Quintile</Text>
