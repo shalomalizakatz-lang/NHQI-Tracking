@@ -181,11 +181,9 @@ export default function FacilityTracker() {
                     </div>
                   )}
                 </div>
-                {summary.ptsDelta !== null && (
-                  <div style={{ fontSize: 10, marginTop: 2, color: summary.ptsDelta > 0 ? "#16a34a" : summary.ptsDelta < 0 ? "#dc2626" : "#94a3b8" }}>
-                    {summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} pts vs {dataset.year} (excl. PAH)
-                  </div>
-                )}
+                <div style={{ fontSize: 10, marginTop: 2, color: "#94a3b8" }}>
+                  vs {dataset.year} trackable: {summary.score2023Trackable}/{TRACKABLE_MAX}
+                </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
@@ -233,9 +231,9 @@ export default function FacilityTracker() {
               {summary.jklDeficiency && (
                 <div style={{ color: "#b45309", fontWeight: 600, marginBottom: 4 }}>⚠ This facility had a J/K/L (immediate jeopardy) health inspection deficiency — DOH excludes it from NHQI quintile ranking. The quintile below is directional only.</div>
               )}
-              {dataset.year} actual: <strong>{summary.score2023}/100 → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
+              {dataset.year} official: <strong>{summary.score2023}/100 → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; vs. DOH 2023 cut points: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts ({summary.ptsDelta > 0 ? `+${summary.ptsDelta}` : summary.ptsDelta} vs {dataset.year}, excl. PAH) → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; {dataset.year} trackable → Current (excl. PAH): <strong style={{ color: qc }}>{summary.score2023Trackable}/{TRACKABLE_MAX} → {summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
               {summary.quintile2027Live !== null && (
                 <span> &nbsp;·&nbsp; vs. Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>
@@ -383,7 +381,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
+        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. "Trackable" figures exclude PAH and share that same {TRACKABLE_MAX}-point basis as Current Score, so they compare directly. DOH's official {dataset.year} score (out of 100) covers every measure including PAH on a normalized basis — it isn't on the same scale as Current Score and shouldn't be subtracted from it directly. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
       </div>
     </div>
   );

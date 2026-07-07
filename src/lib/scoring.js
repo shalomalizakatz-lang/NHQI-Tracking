@@ -287,6 +287,12 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
   const round1 = n => Math.round(n * 10) / 10;
   return {
     score2023,
+    // Same raw-point basis as score2025 (TRACKABLE_MAX, PAH excluded) — use
+    // this, not score2023, when displaying a 2023 figure next to score2025.
+    // score2023 is DOH's normalized 0-100 score across all measures
+    // including PAH; it isn't on the same scale and can't be compared to
+    // score2025 directly.
+    score2023Trackable,
     quintile2023,
     // Facilities with a J/K/L (immediate jeopardy) health inspection
     // deficiency are excluded from NHQI quintile ranking entirely per DOH's
