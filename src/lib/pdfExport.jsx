@@ -83,8 +83,11 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         <View style={styles.scoreRow}>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>{dataset.year} Actual Score</Text>
-            <Text style={styles.scoreVal}>{summary.score2023}/90</Text>
+            <Text style={styles.scoreVal}>{summary.score2023}/100</Text>
             <Text style={{ fontSize: 7, color: "#6b7280" }}>Quintile {summary.quintile2023 ?? "—"}</Text>
+            {summary.jklDeficiency && (
+              <Text style={{ fontSize: 6.5, color: "#b45309", fontWeight: 700 }}>{pdfSafe("JKL deficiency - excluded from ranking")}</Text>
+            )}
           </View>
           <View style={styles.scoreCard}>
             <Text style={styles.scoreLabel}>Current Score (excl. PAH)</Text>
@@ -198,7 +201,7 @@ function FacilityReport({ dataset, facility, displayName, vals, starVals, binary
         )}
 
         <Text style={styles.footer}>
-          {pdfSafe(`${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). DOH cut points regionally adjusted where applicable (${facility.region}). Live cut points rank the same entered numbers against a live NY-wide benchmark computed from current CMS data instead — a directional second opinion, not a DOH-certified figure; shown only for measures with a live cut-point split available. PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`)}
+          {pdfSafe(`${dataset.year} Actual Score is DOH's official normalized score (points earned ÷ max attainable points × 100, not a raw count out of 90 — DOH lowers the max attainable when a measure is excluded for small sample size). ${dataset.year} actuals from NY DOH NHQI dataset (${dataset.source}). DOH cut points regionally adjusted where applicable (${facility.region}). Live cut points rank the same entered numbers against a live NY-wide benchmark computed from current CMS data instead — a directional second opinion, not a DOH-certified figure; shown only for measures with a live cut-point split available. PAH cannot be self-tracked (requires DOH's MDS→SPARCS match), so it's excluded entirely from the Current Score, which is out of ${TRACKABLE_MAX} points, not 90 — DOH's real cycle will still include PAH once calculated. * = DOH's real points for this measure sometimes differ +/-1 from the standard quintile table; current points shown here are directional. Est. quintile is directional, not guaranteed. Facilities with a J/K/L health inspection deficiency are excluded from DOH's NHQI quintile ranking entirely; the score/quintile shown is directional only. Improvement plan headcounts use this facility's average daily census from CMS as an estimate, not the exact long-stay resident count NHQI measures track. Generated ${new Date().toLocaleDateString()}.`)}
         </Text>
       </Page>
     </Document>
