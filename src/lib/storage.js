@@ -5,21 +5,6 @@
 
 const PORTFOLIO_KEY = "nhqi_portfolio_v1";
 const INPUTS_KEY = "nhqi_inputs_v1";
-const SEEDED_KEY = "nhqi_seeded_v1";
-
-// Pre-loads Highland Care Center and Achieve Rehab & Nursing on first run only.
-// Runs once ever (tracked via SEEDED_KEY) so a user who removes them isn't stuck
-// with them reappearing.
-export function ensureSeedPortfolio() {
-  if (localStorage.getItem(SEEDED_KEY)) return;
-  localStorage.setItem(SEEDED_KEY, "1");
-  const portfolio = getPortfolio();
-  if (portfolio.length > 0) return;
-  write(PORTFOLIO_KEY, [
-    { facilityId: "1711", displayName: null, beds: null, addedAt: new Date().toISOString() },
-    { facilityId: "962", displayName: null, beds: null, addedAt: new Date().toISOString() },
-  ]);
-}
 
 function read(key, fallback) {
   try {
