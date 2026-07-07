@@ -95,11 +95,6 @@ export default function Settings() {
         >
           Refresh on GitHub →
         </a>
-        <p className="text-xs text-slate-400 mt-3">
-          Opens the workflow's Actions page — click "Run workflow" there (requires repo access). This app is a
-          static site with no backend, so triggering it directly from here would require a GitHub token, which
-          it deliberately doesn't ask for or store.
-        </p>
       </div>
 
       <div className="bg-stone-100 border border-stone-200 rounded-xl p-5 text-xs text-slate-500 leading-relaxed">
