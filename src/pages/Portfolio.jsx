@@ -148,9 +148,13 @@ export default function Portfolio() {
         )}
       </div>
 
-      <div className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed">
-        {dataset.year} Score is DOH's official normalized score (0–100 = points earned ÷ max attainable points, not a raw point count out of 90 — DOH shrinks the max attainable when a measure is excluded for small sample size, so this figure is always on a 0–100 basis). Current Score and Est. Quintile each show two rows — DOH ranks your entered numbers against the frozen {dataset.year} DOH cut points, Live ranks the same numbers against a live NY-wide benchmark instead (a directional second opinion, not a DOH-certified figure). Both exclude PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta compares the {dataset.year} score to Current Score (DOH) specifically — it doesn't just subtract the two numbers (that would unfairly count PAH's missing points as a loss), it removes PAH's points from the {dataset.year} score first so both sides are measured on the same {TRACKABLE_MAX}-point basis. All projections are directional — actual placement depends on that year's statewide distribution.
-      </div>
+      <ul className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed list-disc list-inside space-y-1">
+        <li>{dataset.year} Score: DOH's official 0–100 score (points ÷ max attainable), not raw points out of 90.</li>
+        <li>DOH / Live rows: DOH = frozen {dataset.year} cut points, Live = live NY-wide benchmark (directional, not DOH-certified).</li>
+        <li>PAH is excluded throughout — it can't be self-tracked.</li>
+        <li>Pts Delta compares Current Score to {dataset.year} on the same PAH-excluded, {TRACKABLE_MAX}-point basis — not a raw subtraction of the two scores above.</li>
+        <li>All projections are directional, not guaranteed.</li>
+      </ul>
     </div>
   );
 }
