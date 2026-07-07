@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-06T14:49:04.925Z",
+  "generatedAt": "2026-07-07T16:08:02.836Z",
   "source": "CMS Provider Data Catalog (data.cms.gov) — MDS Quality Measures & Provider Info datasets, matched by CMS Certification Number (CCN)",
   "measures": {
     "pressure_ulcer": {
@@ -6711,37 +6711,37 @@
     },
     "adl": {
       "boundaries": [
-        9.6,
-        12.5,
-        15.3,
-        19.5
+        10,
+        13,
+        15,
+        19
       ],
       "facilityCount": 558
     },
     "incontinence": {
       "boundaries": [
-        12.1,
-        19.2,
-        23.7,
-        28.1
+        12,
+        19,
+        24,
+        28
       ],
       "facilityCount": 558
     },
     "pneumo_vax": {
       "boundaries": [
-        99.8,
-        98.7,
-        94.9,
-        85.3
+        100,
+        99,
+        95,
+        85
       ],
       "facilityCount": 558
     },
     "flu_vax_resident": {
       "boundaries": [
         100,
-        98.6,
-        96.6,
-        92.6
+        99,
+        97,
+        93
       ],
       "facilityCount": 556
     },
