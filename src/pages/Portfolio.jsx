@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
-import { getPortfolio, addFacility, removeFacility, getAllInputs, ensureSeedPortfolio } from "../lib/storage.js";
+import { getPortfolio, addFacility, removeFacility, getAllInputs } from "../lib/storage.js";
 import { computeFacilitySummary, TRACKABLE_MAX } from "../lib/scoring.js";
 import { getLiveCutpoints } from "../lib/cmsAutofill.js";
 import FacilitySearch from "../components/FacilitySearch.jsx";
@@ -18,7 +18,7 @@ export default function Portfolio() {
     { key: "quintile2027", label: "Est. Quintile" },
     { key: "ptsDelta", label: `Pts Delta (from ${dataset.year} DOH)` },
   ], [dataset.year]);
-  const [portfolio, setPortfolio] = useState(() => { ensureSeedPortfolio(); return getPortfolio(); });
+  const [portfolio, setPortfolio] = useState(() => getPortfolio());
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
 
