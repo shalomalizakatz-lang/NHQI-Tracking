@@ -134,7 +134,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
             const isActive2025 = q2025 === qi;
             const isActive2023 = aQuintileNum === qi;
             const label = m.higherIsBetter
-              ? qi === 1 ? `≥${cutpoints[0]}` : qi === 5 ? `<${cutpoints[3]}` : `${cutpoints[qi - 1]}–${cutpoints[qi - 2]}`
+              ? qi === 1 ? `>${cutpoints[0]}` : qi === 5 ? `≤${cutpoints[3]}` : `${cutpoints[qi - 1]}–${cutpoints[qi - 2]}`
               : qi === 1 ? `≤${cutpoints[0]}` : qi === 5 ? `>${cutpoints[3]}` : `${cutpoints[qi - 2]}–${cutpoints[qi - 1]}`;
             const c = qColor(qi);
             return (
@@ -153,7 +153,7 @@ export default function MeasureRow({ m, actual, cutpoints, val, starVal, binaryV
           {[1, 2, 3, 4, 5].map(qi => {
             const isActiveLive = qLive === qi;
             const label = m.higherIsBetter
-              ? qi === 1 ? `≥${liveCutpoints[0]}` : qi === 5 ? `<${liveCutpoints[3]}` : `${liveCutpoints[qi - 1]}–${liveCutpoints[qi - 2]}`
+              ? qi === 1 ? `>${liveCutpoints[0]}` : qi === 5 ? `≤${liveCutpoints[3]}` : `${liveCutpoints[qi - 1]}–${liveCutpoints[qi - 2]}`
               : qi === 1 ? `≤${liveCutpoints[0]}` : qi === 5 ? `>${liveCutpoints[3]}` : `${liveCutpoints[qi - 2]}–${liveCutpoints[qi - 1]}`;
             return (
               <div key={qi} style={{ padding: "2px 7px", borderRadius: 99, fontSize: 10, background: isActiveLive ? LIVE_COLOR + "14" : "#faf5ff", border: `1px solid ${isActiveLive ? LIVE_COLOR + "60" : "#f3e8ff"}`, color: isActiveLive ? LIVE_COLOR : "#c4b5fd", fontWeight: isActiveLive ? 600 : 400 }}>
