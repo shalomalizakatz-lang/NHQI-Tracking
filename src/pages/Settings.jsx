@@ -1,12 +1,18 @@
 import { useRef, useState } from "react";
 import { loadActiveDataset, saveCustomDataset, clearCustomDataset, hasCustomDataset } from "../lib/dataset.js";
 import { parseNhqiCsv } from "../lib/csvImport.js";
+import { cmsAutofillMeta } from "../lib/cmsAutofill.js";
+
+const REFRESH_WORKFLOW_URL = "https://github.com/shalomalizakatz-lang/NHQI-Tracking/actions/workflows/refresh-cms-data.yml";
 
 export default function Settings() {
   const fileRef = useRef(null);
   const [dataset, setDataset] = useState(() => loadActiveDataset());
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const refreshedDate = cmsAutofillMeta.generatedAt
+    ? new Date(cmsAutofillMeta.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    : null;
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
@@ -70,6 +76,30 @@ export default function Settings() {
             {status.msg}
           </div>
         )}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="text-sm font-semibold text-slate-900 mb-2">CMS auto-fill &amp; live benchmark</div>
+        <p className="text-sm text-slate-500 mb-1 leading-relaxed">
+          Pre-filled current-year values and the Live NY-wide quintile benchmark are pulled from CMS Care Compare
+          by a GitHub Actions workflow — scheduled monthly, or run manually any time.
+        </p>
+        <p className="text-xs text-slate-400 mb-4">
+          {refreshedDate ? `Last refreshed ${refreshedDate}.` : "Not yet refreshed."}
+        </p>
+        <a
+          href={REFRESH_WORKFLOW_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-3 py-1.5"
+        >
+          Refresh on GitHub →
+        </a>
+        <p className="text-xs text-slate-400 mt-3">
+          Opens the workflow's Actions page — click "Run workflow" there (requires repo access). This app is a
+          static site with no backend, so triggering it directly from here would require a GitHub token, which
+          it deliberately doesn't ask for or store.
+        </p>
       </div>
 
       <div className="bg-stone-100 border border-stone-200 rounded-xl p-5 text-xs text-slate-500 leading-relaxed">
