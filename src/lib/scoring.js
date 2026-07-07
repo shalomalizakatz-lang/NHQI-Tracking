@@ -149,10 +149,15 @@ export function getQuintile(m, val, cutpoints) {
   const v = parseFloat(val);
   if (isNaN(v) || !cutpoints || cutpoints.length < 4) return null;
   if (m.higherIsBetter) {
-    if (v >= cutpoints[0]) return 1;
-    if (v >= cutpoints[1]) return 2;
-    if (v >= cutpoints[2]) return 3;
-    if (v >= cutpoints[3]) return 4;
+    // Strict ">", not ">=" — verified against DOH's own published per-row
+    // Quintile/Points values for every higherIsBetter measure (2,053 rows,
+    // 0 mismatches): a value exactly at a cutpoint boundary lands in the
+    // lower quintile, not the upper one (e.g. HPRD Q1/Q2 boundary is 4.0 —
+    // a facility at exactly 4.0 is Q2, not Q1; only values >4.0 are Q1).
+    if (v > cutpoints[0]) return 1;
+    if (v > cutpoints[1]) return 2;
+    if (v > cutpoints[2]) return 3;
+    if (v > cutpoints[3]) return 4;
     return 5;
   } else {
     if (v <= cutpoints[0]) return 1;

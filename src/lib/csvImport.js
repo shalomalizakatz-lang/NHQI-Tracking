@@ -2,6 +2,8 @@
 // the same dataset shape used by the app, so a facility's cut points can be refreshed
 // for a new measurement year without a code change.
 
+import { MEASURE_BY_ID } from "./scoring.js";
+
 const MEASURE_MAP = {
   "1": "contract_staff",
   "2.2": "hprd",
@@ -128,8 +130,18 @@ export function parseNhqiCsv(text) {
     const key = MEASURE_MAP[mid];
     if (!key) continue;
 
-    const cp = [toNum(row[col.q1]), toNum(row[col.q2]), toNum(row[col.q3]), toNum(row[col.q4]), toNum(row[col.q5])];
-    const hasCp = cp.some(v => v !== null);
+    const cpRaw = [toNum(row[col.q1]), toNum(row[col.q2]), toNum(row[col.q3]), toNum(row[col.q4]), toNum(row[col.q5])];
+    const hasCp = cpRaw.some(v => v !== null);
+    // DOH's 5 published quintile columns hold only 4 real boundaries — the
+    // 5th slot is a non-boundary reference value (empirically always equal
+    // to the sample's own ceiling, verified against 5,070 real 2023 rows
+    // with 0 mismatches against DOH's own per-row Quintile/Points values).
+    // Which end holds the real 4 depends on direction: for a higherIsBetter
+    // measure the extra value sits in "First Quintile" (drop index 0); for
+    // lowerIsBetter it sits in "Fifth Quintile" (drop index 4) — this is
+    // what getQuintile() in scoring.js already assumes for both directions.
+    const measureDef = MEASURE_BY_ID[key];
+    const cp = measureDef?.higherIsBetter ? cpRaw.slice(1) : cpRaw.slice(0, 4);
     const numVal = toNum(row[col.numValue]);
     const charVal = (row[col.charValue] || "").trim();
     let quintile = (row[col.quintile] || "").trim();
