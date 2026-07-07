@@ -160,7 +160,10 @@ export default function FacilityTracker() {
         <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 10, color: "#94a3b8" }}>{dataset.year} Score</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#475569", fontFamily: "monospace" }}>{summary.score2023}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/90</span></div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#475569", fontFamily: "monospace" }}>{summary.score2023}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/100</span></div>
+            {summary.jklDeficiency && (
+              <div style={{ fontSize: 9, color: "#b45309", fontWeight: 600 }}>⚠ JKL — excluded from ranking</div>
+            )}
           </div>
           {summary.score2025 !== null && (
             <>
@@ -177,6 +180,9 @@ export default function FacilityTracker() {
                       <div style={{ fontSize: 18, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>{summary.score2025Live}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{summary.liveMax}</span></div>
                     </div>
                   )}
+                </div>
+                <div style={{ fontSize: 10, marginTop: 2, color: "#94a3b8" }}>
+                  vs {dataset.year} trackable: {summary.score2023Trackable}/{TRACKABLE_MAX}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
@@ -222,9 +228,12 @@ export default function FacilityTracker() {
         {tab === "priority" && (
           <div>
             <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
-              {dataset.year} actual: <strong>{summary.score2023}/90 pts → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
+              {summary.jklDeficiency && (
+                <div style={{ color: "#b45309", fontWeight: 600, marginBottom: 4 }}>⚠ This facility had a J/K/L (immediate jeopardy) health inspection deficiency — DOH excludes it from NHQI quintile ranking. The quintile below is directional only.</div>
+              )}
+              {dataset.year} official: <strong>{summary.score2023}/100 → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
               {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; vs. DOH 2023 cut points: <strong style={{ color: qc }}>{summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
+                <span> &nbsp;·&nbsp; {dataset.year} trackable → Current (excl. PAH): <strong style={{ color: qc }}>{summary.score2023Trackable}/{TRACKABLE_MAX} → {summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
               )}
               {summary.quintile2027Live !== null && (
                 <span> &nbsp;·&nbsp; vs. Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>
@@ -246,8 +255,9 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {[
           {
-            key: "actual", label: `${dataset.year} Actual Score`, sub: `Actual · drove ${dataset.year} payment`,
-            values: [{ val: `${summary.score2023}/90`, color: "#475569" }],
+            key: "actual", label: `${dataset.year} Actual Score`,
+            sub: summary.jklDeficiency ? "⚠ JKL deficiency — excluded from ranking" : `Actual · drove ${dataset.year} payment`,
+            values: [{ val: `${summary.score2023}/100`, color: "#475569" }],
           },
           {
             key: "current", label: "Current Score (excl. PAH)",
@@ -371,7 +381,7 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
+        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. "Trackable" figures exclude PAH and share that same {TRACKABLE_MAX}-point basis as Current Score, so they compare directly. DOH's official {dataset.year} score (out of 100) covers every measure including PAH on a normalized basis — it isn't on the same scale as Current Score and shouldn't be subtracted from it directly. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
       </div>
     </div>
   );

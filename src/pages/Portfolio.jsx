@@ -110,9 +110,12 @@ export default function Portfolio() {
                 >
                   <td className="px-4 py-3">
                     <div className="text-slate-900 font-medium">{r.name}</div>
-                    <div className="text-xs text-slate-400">{r.city}, {r.county}{r.closed ? " · closed" : ""}</div>
+                    <div className="text-xs text-slate-400">
+                      {r.city}, {r.county}{r.closed ? " · closed" : ""}
+                      {r.jklDeficiency && <span className="text-amber-600"> · ⚠ JKL, excluded from ranking</span>}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-slate-500">{r.score2023}/90</td>
+                  <td className="px-4 py-3 font-mono text-slate-500">{r.score2023}/100</td>
                   <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2023} /></td>
                   <td className="px-4 py-3 font-mono text-slate-500">
                     <div><span className="text-[10px] text-slate-400 font-sans mr-1">DOH</span>{r.score2025 !== null ? `${r.score2025}/${TRACKABLE_MAX}` : "—"}</div>
@@ -146,7 +149,7 @@ export default function Portfolio() {
       </div>
 
       <div className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed">
-        {dataset.year} Score is out of 90. Current Score and Est. Quintile each show two rows — DOH ranks your entered numbers against the frozen {dataset.year} DOH cut points, Live ranks the same numbers against a live NY-wide benchmark instead (a directional second opinion, not a DOH-certified figure). Both exclude PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta compares the {dataset.year} score to Current Score (DOH) specifically — it doesn't just subtract the two numbers (that would unfairly count PAH's missing points as a loss), it removes PAH's points from the {dataset.year} score first so both sides are measured on the same {TRACKABLE_MAX}-point basis. All projections are directional — actual placement depends on that year's statewide distribution.
+        {dataset.year} Score is DOH's official normalized score (0–100 = points earned ÷ max attainable points, not a raw point count out of 90 — DOH shrinks the max attainable when a measure is excluded for small sample size, so this figure is always on a 0–100 basis). Current Score and Est. Quintile each show two rows — DOH ranks your entered numbers against the frozen {dataset.year} DOH cut points, Live ranks the same numbers against a live NY-wide benchmark instead (a directional second opinion, not a DOH-certified figure). Both exclude PAH, which can't be self-tracked (requires DOH's MDS→SPARCS match), so it isn't guessed at or carried forward from an old value. Pts Delta compares the {dataset.year} score to Current Score (DOH) specifically — it doesn't just subtract the two numbers (that would unfairly count PAH's missing points as a loss), it removes PAH's points from the {dataset.year} score first so both sides are measured on the same {TRACKABLE_MAX}-point basis. All projections are directional — actual placement depends on that year's statewide distribution.
       </div>
     </div>
   );

@@ -245,9 +245,20 @@ export function getDisplayed2025Points(dataset, facility, m, vals, starVals, bin
 // total unchanged: there's no "live version" of a pass/fail threshold or a
 // five-star rating, so both tracks agree on those measures by construction.
 export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoints) {
+  // facility.totalScore is DOH's published score: (points earned / max
+  // attainable) x 100, NOT a raw point sum out of 90. Max attainable shrinks
+  // below 90 when DOH excludes a measure for small sample size (marked "SS"
+  // in actuals) — so this is a normalized 0-100 figure, always comparable
+  // across facilities, not "points out of 90". Verified against real data:
+  // a facility with SS-excluded measures and 50 raw points out of an
+  // adjusted 75-point max published totalScore 66.7 (=50/75x100), not 50/90.
   const score2023 = facility.totalScore ?? totalFromActuals(facility.actuals);
   const quintile2023 = facility.overallQuintile ?? null;
-  const score2023Trackable = score2023 - MEASURES
+  // ptsDelta needs to compare like-for-like raw point totals against
+  // score2025 (also raw points), so it's built from totalFromActuals (raw
+  // points), not from the normalized score2023 above — subtracting PAH's
+  // raw points from a 0-100 normalized figure would mix units.
+  const score2023Trackable = totalFromActuals(facility.actuals) - MEASURES
     .filter(m => m.notTrackable)
     .reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0);
 
@@ -276,7 +287,18 @@ export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoin
   const round1 = n => Math.round(n * 10) / 10;
   return {
     score2023,
+    // Same raw-point basis as score2025 (TRACKABLE_MAX, PAH excluded) — use
+    // this, not score2023, when displaying a 2023 figure next to score2025.
+    // score2023 is DOH's normalized 0-100 score across all measures
+    // including PAH; it isn't on the same scale and can't be compared to
+    // score2025 directly.
+    score2023Trackable,
     quintile2023,
+    // Facilities with a J/K/L (immediate jeopardy) health inspection
+    // deficiency are excluded from NHQI quintile ranking entirely per DOH's
+    // methodology — surfaced so the UI can flag that this facility's
+    // quintile isn't part of the official ranked pool.
+    jklDeficiency: !!facility.jklDeficiency,
     score2025: hasEntries ? score2025 : null,
     entered,
     quintile2027: hasEntries ? estimateQuintile(score2025, TRACKABLE_MAX) : null,

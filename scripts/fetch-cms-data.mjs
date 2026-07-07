@@ -209,10 +209,26 @@ function percentile(sortedAsc, p) {
 // getQuintile in src/lib/scoring.js): cutpoints[0] is the Q1/best threshold,
 // cutpoints[3] is the Q4→Q5 threshold. For higherIsBetter that's descending
 // (P80, P60, P40, P20); for lowerIsBetter it's ascending (P20, P40, P60, P80).
-function computeLiveCutpoints(values, higherIsBetter) {
+//
+// `roundToInt`: for measures where DOH's own cut points are whole numbers
+// (e.g. pneumococcal/flu vaccine %, ADL, incontinence — all "% of residents"
+// measures DOH apparently rounds to the nearest percent), round the live
+// boundaries the same way instead of the default 1-decimal precision, so the
+// live benchmark reads consistently with how DOH presents that same measure.
+function computeLiveCutpoints(values, higherIsBetter, roundToInt) {
+  const round = roundToInt ? Math.round : round1;
   const sorted = [...values].sort((a, b) => a - b);
-  const ps = [0.2, 0.4, 0.6, 0.8].map(p => round1(percentile(sorted, p)));
+  const ps = [0.2, 0.4, 0.6, 0.8].map(p => round(percentile(sorted, p)));
   return higherIsBetter ? ps.slice().reverse() : ps;
+}
+
+// Whether DOH's own frozen cut points for this measure are all whole numbers
+// — if so, the live boundaries should match that precision instead of always
+// showing a decimal.
+function dohUsesWholeNumberCutpoints(facilitiesDataset, measureId) {
+  const cutpointsByRegion = facilitiesDataset.measures?.[measureId]?.cutpoints;
+  const cutpoints = cutpointsByRegion?.default || Object.values(cutpointsByRegion || {})[0];
+  return Array.isArray(cutpoints) && cutpoints.length > 0 && cutpoints.every(v => Number.isInteger(v));
 }
 
 async function main() {
@@ -346,9 +362,10 @@ async function main() {
       continue;
     }
     const m = MEASURES.find(mm => mm.id === measureId);
-    const boundaries = computeLiveCutpoints(values, m.higherIsBetter);
+    const roundToInt = dohUsesWholeNumberCutpoints(facilitiesDataset, measureId);
+    const boundaries = computeLiveCutpoints(values, m.higherIsBetter, roundToInt);
     liveCutpoints[measureId] = { boundaries, facilityCount: values.length };
-    log(`  liveCutpoints ${measureId}: boundaries=${JSON.stringify(boundaries)} (n=${values.length})`);
+    log(`  liveCutpoints ${measureId}: boundaries=${JSON.stringify(boundaries)} (n=${values.length}${roundToInt ? ", rounded to whole numbers to match DOH" : ""})`);
   }
 
   const out = {
