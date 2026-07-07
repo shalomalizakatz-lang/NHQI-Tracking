@@ -3,11 +3,18 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Served from two places: GitHub Pages under a /NHQI-Tracking/ subpath, and
+// optionally a second static host (Netlify, Vercel, etc.) at its domain root.
+// Routing itself doesn't care (App.jsx uses HashRouter — no server rewrite
+// rules needed either way), but asset URLs and the PWA manifest do need the
+// right base path baked in at build time. Defaults to root ('/') so a fresh
+// clone or a root-domain host works with zero config; the GH Pages workflow
+// sets VITE_BASE_PATH=/NHQI-Tracking/ to override it for that deploy only.
+const base = process.env.VITE_BASE_PATH || '/'
+
 // https://vite.dev/config/
 export default defineConfig({
-  // Served from https://<user>.github.io/NHQI-Tracking/ — assets must resolve
-  // under that subpath rather than the domain root.
-  base: '/NHQI-Tracking/',
+  base,
   plugins: [
     react(),
     tailwindcss(),
@@ -26,8 +33,8 @@ export default defineConfig({
         theme_color: '#0d9488',
         background_color: '#fafaf9',
         display: 'standalone',
-        start_url: '/NHQI-Tracking/',
-        scope: '/NHQI-Tracking/',
+        start_url: base,
+        scope: base,
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },

@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# HashRouter (see src/App.jsx) — all routing happens client-side after the
+# hash, so no SPA-fallback redirect rule is needed here.
