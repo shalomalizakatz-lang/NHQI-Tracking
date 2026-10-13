@@ -56,13 +56,37 @@ export function addFacility(facilityId, { displayName, beds } = {}) {
   return next;
 }
 
+// Returns what was removed (the portfolio entry and its inputs bucket), not just the
+// remaining list, so a caller can hold them in memory for a transient "Undo" -- this is
+// NOT a persisted undo (nothing is written back until/unless restoreFacility is called),
+// since storage.js has no snapshot/tombstone concept; losing the in-memory copy (e.g. on
+// page refresh) means the removal is final, same as before this existed.
 export function removeFacility(facilityId) {
-  const next = getPortfolio().filter(f => f.facilityId !== facilityId);
+  const portfolio = getPortfolio();
+  const removedEntry = portfolio.find(f => f.facilityId === facilityId) || null;
+  const next = portfolio.filter(f => f.facilityId !== facilityId);
   write(PORTFOLIO_KEY, next);
   const blob = readInputsBlob();
+  const removedInputs = blob[facilityId] || null;
   delete blob[facilityId];
   write(INPUTS_KEY, blob);
-  return next;
+  return { portfolio: next, removedEntry, removedInputs };
+}
+
+// Undoes a removeFacility call using the values it returned. Only meaningful within the
+// same browser session that called removeFacility -- there is nowhere else those values
+// are kept.
+export function restoreFacility(removedEntry, removedInputs) {
+  if (!removedEntry) return;
+  const portfolio = getPortfolio();
+  if (!portfolio.some(f => f.facilityId === removedEntry.facilityId)) {
+    write(PORTFOLIO_KEY, [...portfolio, removedEntry]);
+  }
+  if (removedInputs) {
+    const blob = readInputsBlob();
+    blob[removedEntry.facilityId] = removedInputs;
+    write(INPUTS_KEY, blob);
+  }
 }
 
 export function renameFacility(facilityId, displayName) {

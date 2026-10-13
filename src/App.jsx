@@ -1,54 +1,29 @@
-import { HashRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import Portfolio from "./pages/Portfolio.jsx";
 import FacilityTracker from "./pages/FacilityTracker.jsx";
 import Settings from "./pages/Settings.jsx";
+import AppShell from "./components/ui/AppShell.jsx";
 
-function NavLink({ to, children }) {
-  const loc = useLocation();
-  const active = loc.pathname === to;
-  return (
-    <Link
-      to={to}
-      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-        active ? "bg-teal-600 text-white" : "text-slate-500 hover:text-slate-900"
-      }`}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function Shell({ children }) {
-  return (
-    <div className="min-h-screen bg-stone-50 text-slate-900">
-      <div className="border-b border-slate-200 bg-white px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-7 bg-teal-600 rounded" />
-          <div>
-            <div className="text-base font-bold">NHQI Multi-Facility Tracker</div>
-            <div className="text-[11px] text-slate-400">NY DOH Nursing Home Quality Initiative</div>
-          </div>
-        </div>
-        <nav className="flex gap-1">
-          <NavLink to="/">Portfolio</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-        </nav>
-      </div>
-      {children}
-    </div>
-  );
+// A bare /facility/:facilityId (an old bookmark/share link, or a link with no
+// tab segment) redirects to its Overview tab so existing links keep working.
+// Built explicit with useParams rather than a relative <Navigate to="overview">
+// to avoid depending on route-relative resolution semantics.
+function RedirectToOverview() {
+  const { facilityId } = useParams();
+  return <Navigate to={`/facility/${facilityId}/overview`} replace />;
 }
 
 export default function App() {
   return (
     <HashRouter>
-      <Shell>
+      <AppShell>
         <Routes>
           <Route path="/" element={<Portfolio />} />
-          <Route path="/facility/:facilityId" element={<FacilityTracker />} />
+          <Route path="/facility/:facilityId" element={<RedirectToOverview />} />
+          <Route path="/facility/:facilityId/:tab" element={<FacilityTracker />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
-      </Shell>
+      </AppShell>
     </HashRouter>
   );
 }

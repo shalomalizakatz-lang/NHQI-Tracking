@@ -15,6 +15,10 @@ const base = process.env.VITE_BASE_PATH || '/'
 // https://vite.dev/config/
 export default defineConfig({
   base,
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+  },
   plugins: [
     react(),
     tailwindcss(),

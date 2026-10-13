@@ -1,78 +1,89 @@
 import { qColor } from "../lib/colors.js";
-import { getNextTierGain } from "../lib/nhqi/scorer.js";
+import { getAllOpportunities, getMissingEvidence } from "../lib/opportunities.js";
+import Card from "./ui/Card.jsx";
+import Badge from "./ui/Badge.jsx";
 
-const LIVE_COLOR = "#6d28d9";
-
-// Consumes scorer.js's output directly — no independent point math here. Two kinds of rows:
-// real positive point gains (ranked by size), and missing-evidence tasks (measures where the
-// input itself is unresolved, so there's nothing to score yet) — never disguised as the same
-// thing, and never showing a 0-point "opportunity" dressed up as one.
+// Consumes scorer.js's output (via the shared opportunities.js selection) directly -- no
+// independent point math here. Two kinds of rows: real positive point gains (ranked by size),
+// and missing-evidence tasks (measures where the input itself is unresolved, so there's
+// nothing to score yet) — never disguised as the same thing, and never showing a 0-point
+// "opportunity" dressed up as one.
 export default function PriorityList({ scored }) {
-  const opportunities = scored.perMeasure
-    .filter(r => (r.measure.scoringRule === "quintile" || r.measure.scoringRule === "quintile_pah") && r.currentQuintile && r.currentQuintile > 1)
-    .map(r => ({ row: r, gain: getNextTierGain(r) }))
-    .filter(x => x.gain !== null && x.gain > 0)
-    .sort((a, b) => b.gain - a.gain);
-
-  const missingEvidence = scored.perMeasure.filter(r => r.observation.state === "missing_input" || r.observation.state === "invalid_input");
+  const opportunities = getAllOpportunities(scored);
+  const missingEvidence = getMissingEvidence(scored);
 
   if (opportunities.length === 0 && missingEvidence.length === 0) {
     return (
-      <div style={{ color: "#94a3b8", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
+      <div className="py-8 text-center text-sm text-slate-500">
         No real positive point gains identified from the current entries, and no missing inputs. Everything resolved is at its best tier for the selected benchmark.
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-5">
       {opportunities.length > 0 && (
-        <>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12 }}>
-            Ranked by attainable point gain — only moves that actually earn points under the applicable 2025 rule for that measure.
-          </div>
-          {opportunities.map((x, i) => {
-            const { row } = x;
-            const m = row.measure;
-            const label = m.higherIsBetter ? "↑" : "↓";
-            return (
-              <div key={m.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#cbd5e1", fontFamily: "monospace", minWidth: 28 }}>#{i + 1}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 600, marginBottom: 4 }}>{m.displayName}</div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
-                    <span style={{ color: qColor(row.currentQuintile), fontWeight: 600 }}>Q{row.currentQuintile} → Q{row.currentQuintile - 1}</span>
-                    {row.gapInfo && (
-                      <span style={{ color: "#d97706" }}>
-                        {label} {row.gapInfo.gap.toFixed(1)}{m.unit === "%" ? "%" : ` ${m.unit}`} needed · target {row.gapInfo.displayTarget}{m.unit === "%" ? "%" : ` ${m.unit}`}
-                      </span>
-                    )}
-                    {row.pointsBasis === "attainment_plus_improvement" && (
-                      <span style={{ fontSize: 10, color: LIVE_COLOR }}>(improvement-eligible, prior Q{row.priorQuintile})</span>
-                    )}
+        <div>
+          <p className="mb-2.5 text-xs text-slate-500">Ranked by attainable point gain — only moves that actually earn points under the applicable 2025 rule for that measure.</p>
+          <div className="flex flex-col gap-1.5">
+            {opportunities.map((x, i) => {
+              const { row, gain } = x;
+              const m = row.measure;
+              const label = m.higherIsBetter ? "↑" : "↓";
+              return (
+                <Card key={m.id} className="flex items-center gap-3 p-3">
+                  {/* aria-hidden since the list's own DOM order already conveys rank to
+                      assistive tech -- this restates it for sighted skimming only. That
+                      doesn't exempt it from contrast rules, though: aria-hidden hides it from
+                      screen readers, not from low-vision sighted users reading the screen, so
+                      the color still has to clear 4.5:1 like any other visible text. */}
+                  <div aria-hidden="true" className="w-6 shrink-0 text-right text-lg font-semibold tabular-nums text-slate-500">
+                    #{i + 1}
                   </div>
-                </div>
-                <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.gain}</div>
-                  <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
-                </div>
-              </div>
-            );
-          })}
-        </>
+                  <div className="flex-1">
+                    <div className="mb-0.5 text-sm font-semibold text-slate-900">{m.displayName}</div>
+                    <div className="flex flex-wrap items-baseline gap-1.5 text-xs">
+                      <span className="font-semibold" style={{ color: qColor(row.currentQuintile) }}>
+                        Q{row.currentQuintile} → Q{row.currentQuintile - 1}
+                      </span>
+                      {row.gapInfo && (
+                        <span className="text-amber-700">
+                          {label} {row.gapInfo.gap.toFixed(1)}
+                          {m.unit === "%" ? "%" : ` ${m.unit}`} needed · target {row.gapInfo.displayTarget}
+                          {m.unit === "%" ? "%" : ` ${m.unit}`}
+                        </span>
+                      )}
+                      {row.pointsBasis === "attainment_plus_improvement" && <span className="text-slate-500">(improvement-eligible, prior Q{row.priorQuintile})</span>}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-[var(--radius-control)] bg-green-50 px-3.5 py-1.5 text-center">
+                    <div className="text-lg font-semibold tabular-nums text-green-700">+{gain}</div>
+                    <div className="text-[10px] text-green-700">points</div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {missingEvidence.length > 0 && (
-        <>
-          <div style={{ fontSize: 11, color: "#64748b", margin: "18px 0 12px" }}>
-            Missing evidence — entering these would resolve a currently-unresolved measure, not a guaranteed gain:
+        <div>
+          <p className="mb-2.5 text-xs text-slate-500">Missing evidence — entering these would resolve a currently-unresolved measure, not a guaranteed gain:</p>
+          <div className="flex flex-col gap-1.5">
+            {missingEvidence.map(r => (
+              <div key={r.measure.id} className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                <div className="flex items-center gap-2">
+                  <strong className="font-semibold">{r.measure.displayName}</strong>
+                  <Badge tone="amber">{r.observation.state === "invalid_input" ? "Invalid" : "Not entered"}</Badge>
+                </div>
+                <div className="mt-0.5 text-xs">
+                  Up to {r.measure.maxPoints} pts at stake · period: {r.measure.measurementPeriod?.label ?? "unspecified"}
+                </div>
+              </div>
+            ))}
           </div>
-          {missingEvidence.map(r => (
-            <div key={r.measure.id} style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", marginBottom: 6, fontSize: 12, color: "#92400e" }}>
-              <strong>{r.measure.displayName}</strong> — {r.observation.state === "invalid_input" ? "entered value is invalid" : "not entered"}. Up to {r.measure.maxPoints} pts at stake, period: {r.measure.measurementPeriod?.label ?? "unspecified"}.
-            </div>
-          ))}
-        </>
+        </div>
       )}
     </div>
   );

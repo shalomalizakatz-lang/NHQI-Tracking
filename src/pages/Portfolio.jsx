@@ -1,166 +1,378 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
-import { getPortfolio, addFacility, removeFacility, getAllPlainInputs } from "../lib/storage.js";
-import { scoreFacility, buildPriorYearQuintilesFrom2023Actuals } from "../lib/nhqi/scorer.js";
-import { official2023Benchmark } from "../lib/nhqi/benchmarks.js";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { addFacility, removeFacility, restoreFacility } from "../lib/storage.js";
+import usePortfolioRows from "../lib/usePortfolioRows.js";
 import { CYCLE } from "../lib/nhqi/measures/2025.js";
 import FacilitySearch from "../components/FacilitySearch.jsx";
 import QuintileBadge from "../components/QuintileBadge.jsx";
+import PageHeader from "../components/ui/PageHeader.jsx";
+import { Toolbar, SearchInput, FilterChip } from "../components/ui/Toolbar.jsx";
+import { Table, Th, TableRow } from "../components/ui/Table.jsx";
+import Card from "../components/ui/Card.jsx";
+import Badge from "../components/ui/Badge.jsx";
+import Number from "../components/ui/Number.jsx";
+import EmptyState from "../components/ui/EmptyState.jsx";
+import Dialog from "../components/ui/Dialog.jsx";
+import { FOCUS_RING, cx } from "../components/ui/classNames.js";
 
-const columns = [
-  { key: "name", label: "Facility" },
-  { key: "score2023", label: "Official result" },
-  { key: "coverage", label: "Coverage" },
-  { key: "knownPoints", label: `Known points, cycle ${CYCLE}` },
-];
+const UNDO_WINDOW_MS = 8000;
+
+function matchesQuery(row, query) {
+  if (!query.trim()) return true;
+  const q = query.trim().toLowerCase();
+  return row.name.toLowerCase().includes(q) || row.city.toLowerCase().includes(q) || row.county.toLowerCase().includes(q);
+}
+
+function matchesFilter(row, filter) {
+  if (filter === "needsData") return row.needsData;
+  if (filter === "invalidStale") return row.hasInvalidOrStale;
+  if (filter === "opportunities") return row.topOpportunity !== null;
+  return true;
+}
+
+function NextOpportunity({ row }) {
+  if (row.topOpportunity) {
+    const { row: measureRow, gain } = row.topOpportunity;
+    return (
+      <span className="text-sm text-slate-900">
+        {measureRow.measure.displayName} <span className="font-medium text-green-700">+{gain} pts</span>
+      </span>
+    );
+  }
+  if (row.needsData) return <span className="text-sm text-amber-800">Missing inputs</span>;
+  return <span className="text-sm text-slate-500">No real gains identified</span>;
+}
+
+function CompletenessText({ row }) {
+  const { measuresKnown, measuresTotal } = row.coverage;
+  const complete = measuresKnown === measuresTotal;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-sm tabular-nums text-slate-900">
+        {measuresKnown}/{measuresTotal} measures
+      </span>
+      {!complete && <Badge tone="amber">{measuresTotal - measuresKnown} unresolved</Badge>}
+    </div>
+  );
+}
+
+function PortfolioFacilityCard({ row, onRemove }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <Link
+            to={`/facility/${row.facilityId}`}
+            className={cx("text-sm font-semibold text-slate-900 hover:text-teal-700", FOCUS_RING)}
+          >
+            {row.name}
+          </Link>
+          <div className="text-xs text-slate-500">
+            {row.city}, {row.county}
+            {row.closed ? " · closed" : ""}
+          </div>
+        </div>
+        {row.jklDeficiency && <Badge tone="amber">JKL excluded</Badge>}
+      </div>
+
+      <div className="mt-3">
+        <CompletenessText row={row} />
+      </div>
+
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <Number value={row.knownPoints} denominator={row.fullEligibleMax} basis={`Known points, cycle ${CYCLE}`} size="md" />
+        <div className="text-right text-xs text-slate-500">
+          2023 official: {row.score2023 ?? "—"}/100
+          <div className="mt-0.5">
+            <QuintileBadge quintile={row.quintile2023} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <NextOpportunity row={row} />
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <Link
+          to={`/facility/${row.facilityId}`}
+          className={cx(
+            "flex-1 rounded-[var(--radius-control)] bg-teal-700 px-3 py-2 text-center text-sm font-medium text-white hover:bg-teal-800",
+            FOCUS_RING
+          )}
+        >
+          Open
+        </Link>
+        <button
+          type="button"
+          onClick={() => onRemove(row)}
+          aria-label={`Remove ${row.name} from portfolio`}
+          className={cx("rounded-[var(--radius-control)] px-3 py-2 text-sm text-slate-500 hover:bg-slate-50", FOCUS_RING)}
+        >
+          Remove
+        </button>
+      </div>
+    </Card>
+  );
+}
 
 export default function Portfolio() {
-  const navigate = useNavigate();
-  const [dataset] = useState(() => loadActiveDataset());
-  const [portfolio, setPortfolio] = useState(() => getPortfolio());
-  const [sortKey, setSortKey] = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
+  const { dataset, rows, refresh } = usePortfolioRows();
+  const trackedIds = useMemo(() => new Set(rows.map(r => r.facilityId)), [rows]);
 
-  useEffect(() => setPortfolio(getPortfolio()), []);
+  const [addOpen, setAddOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [undo, setUndo] = useState(null); // { removedEntry, removedInputs, name, timeoutId }
 
-  const rows = useMemo(() => {
-    const inputsAll = getAllPlainInputs();
-    return portfolio
-      .map(entry => {
-        const facility = findFacilityById(dataset, entry.facilityId);
-        if (!facility) return null;
-        const benchmark = official2023Benchmark(dataset, facility);
-        const priorYearQuintiles = buildPriorYearQuintilesFrom2023Actuals(facility);
-        const inputs = inputsAll[entry.facilityId] || { vals: {}, starVals: {}, binaryVals: {}, pahScenario: null };
-        const scored = scoreFacility({ facility, inputs, benchmark, priorYearQuintiles });
-        return {
-          facilityId: entry.facilityId,
-          name: entry.displayName || facility.name,
-          city: facility.city,
-          county: facility.county,
-          closed: facility.closed,
-          jklDeficiency: facility.jklDeficiency,
-          score2023: facility.totalScore ?? null,
-          quintile2023: facility.overallQuintile ?? null,
-          coverage: scored.coverage,
-          knownPoints: scored.knownEarnedPoints,
-          unresolvedMax: scored.unresolvedMaxPoints,
-          fullEligibleMax: scored.fullEligibleMax,
-        };
-      })
-      .filter(Boolean);
-  }, [portfolio, dataset]);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState({ key: "name", dir: "asc" });
 
-  const sortedRows = useMemo(() => {
-    const dir = sortDir === "asc" ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      const key = sortKey === "coverage" ? "coverage" : sortKey;
-      const av = key === "coverage" ? a.coverage.measuresKnown : a[sortKey];
-      const bv = key === "coverage" ? b.coverage.measuresKnown : b[sortKey];
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      needsData: rows.filter(r => r.needsData).length,
+      invalidStale: rows.filter(r => r.hasInvalidOrStale).length,
+      opportunities: rows.filter(r => r.topOpportunity !== null).length,
+    }),
+    [rows]
+  );
+
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter(r => matchesQuery(r, query) && matchesFilter(r, filter));
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = sort.key === "coverage" ? a.coverage.measuresKnown : sort.key === "topGain" ? a.topOpportunity?.gain ?? -1 : a[sort.key];
+      const bv = sort.key === "coverage" ? b.coverage.measuresKnown : sort.key === "topGain" ? b.topOpportunity?.gain ?? -1 : b[sort.key];
       if (av === null || av === undefined) return 1;
       if (bv === null || bv === undefined) return -1;
       if (typeof av === "string") return av.localeCompare(bv) * dir;
       return (av - bv) * dir;
     });
-  }, [rows, sortKey, sortDir]);
+  }, [rows, query, filter, sort]);
 
   function toggleSort(key) {
-    if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
+    setSort(s => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   }
 
   function handleAdd(facilityId) {
     addFacility(facilityId);
-    setPortfolio(getPortfolio());
+    refresh();
+    setAddOpen(false);
   }
 
-  function handleRemove(facilityId) {
-    if (!window.confirm("Remove this facility from your tracked portfolio? Its entered current-cycle data will be deleted.")) return;
-    removeFacility(facilityId);
-    setPortfolio(getPortfolio());
+  function handleConfirmRemove() {
+    if (!removeTarget) return;
+    if (undo?.timeoutId) clearTimeout(undo.timeoutId);
+    const { removedEntry, removedInputs } = removeFacility(removeTarget.facilityId);
+    refresh();
+    const timeoutId = setTimeout(() => setUndo(null), UNDO_WINDOW_MS);
+    setUndo({ removedEntry, removedInputs, name: removeTarget.name, timeoutId });
+    setRemoveTarget(null);
   }
 
-  const trackedIds = useMemo(() => new Set(portfolio.map(p => p.facilityId)), [portfolio]);
+  function handleUndo() {
+    if (!undo) return;
+    clearTimeout(undo.timeoutId);
+    restoreFacility(undo.removedEntry, undo.removedInputs);
+    refresh();
+    setUndo(null);
+  }
+
+  const needsDataCount = counts.needsData;
 
   return (
-    <div className="px-6 py-6 max-w-6xl mx-auto">
-      <FacilitySearch dataset={dataset} onAdd={handleAdd} alreadyTrackedIds={trackedIds} />
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Portfolio"
+        context={`Cycle ${CYCLE} · modeled against 2023 NY DOH cutpoints · ${rows.length} facilit${rows.length === 1 ? "y" : "ies"} tracked${
+          needsDataCount > 0 ? ` · ${needsDataCount} need${needsDataCount === 1 ? "s" : ""} data` : ""
+        }`}
+        actions={
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className={cx(
+              "rounded-[var(--radius-control)] bg-teal-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-teal-800",
+              FOCUS_RING
+            )}
+          >
+            Add facility
+          </button>
+        }
+      />
 
-      <div className="mt-2 text-xs text-slate-400">
-        Modeled against 2023 NY DOH cutpoints · cycle {CYCLE} rules · Saved on this device · Independent planning tool. Not affiliated with NY DOH.
-      </div>
+      {rows.length > 0 && (
+        <Toolbar>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search tracked facilities…" />
+          <FilterChip active={filter === "all"} count={counts.all} onClick={() => setFilter("all")}>
+            All
+          </FilterChip>
+          <FilterChip active={filter === "needsData"} count={counts.needsData} onClick={() => setFilter("needsData")}>
+            Needs data
+          </FilterChip>
+          <FilterChip active={filter === "invalidStale"} count={counts.invalidStale} onClick={() => setFilter("invalidStale")}>
+            Invalid/stale
+          </FilterChip>
+          <FilterChip active={filter === "opportunities"} count={counts.opportunities} onClick={() => setFilter("opportunities")}>
+            Opportunities
+          </FilterChip>
+        </Toolbar>
+      )}
 
-      <div className="mt-4 bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-900">
-          Portfolio — {sortedRows.length} facilit{sortedRows.length === 1 ? "y" : "ies"} tracked
-        </div>
-        {sortedRows.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-slate-400">
-            No facilities tracked yet. Search above to add one.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left">
-                {columns.map(c => (
-                  <th
-                    key={c.key}
-                    onClick={() => toggleSort(c.key)}
-                    className="px-4 py-2 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-600"
-                  >
-                    {c.label}{sortKey === c.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
-                  </th>
+      {rows.length === 0 ? (
+        <Card>
+          <EmptyState
+            title="Track your first New York facility"
+            description="Search DOH's 2023 NHQI dataset for a facility to start tracking its cycle 2025 inputs and points."
+            action={
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className={cx("rounded-[var(--radius-control)] bg-teal-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-teal-800", FOCUS_RING)}
+              >
+                Add a facility
+              </button>
+            }
+          />
+        </Card>
+      ) : visibleRows.length === 0 ? (
+        <Card>
+          <EmptyState
+            title={query.trim() ? `No facilities match "${query}"` : "No facilities match this filter"}
+            description={query.trim() ? "Try a different name, city, or county." : "Try a different filter."}
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setFilter("all");
+                }}
+                className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50", FOCUS_RING)}
+              >
+                Clear filters
+              </button>
+            }
+          />
+        </Card>
+      ) : (
+        <>
+          <Card className="hidden overflow-x-auto md:block">
+            <Table>
+              <thead>
+                <TableRow>
+                  <Th sortKey="name" sort={sort} onSort={toggleSort} className="pl-4">
+                    Facility
+                  </Th>
+                  <Th sortKey="coverage" sort={sort} onSort={toggleSort}>
+                    Completeness
+                  </Th>
+                  <Th sortKey="knownPoints" sort={sort} onSort={toggleSort}>
+                    Known points, cycle {CYCLE}
+                  </Th>
+                  <Th sortKey="topGain" sort={sort} onSort={toggleSort}>
+                    Next opportunity
+                  </Th>
+                  <Th className="pr-4">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </TableRow>
+              </thead>
+              <tbody>
+                {visibleRows.map(row => (
+                  <TableRow key={row.facilityId}>
+                    <td className="py-3 pl-4">
+                      <Link to={`/facility/${row.facilityId}`} className={cx("font-medium text-slate-900 hover:text-teal-700", FOCUS_RING)}>
+                        {row.name}
+                      </Link>
+                      <div className="text-xs text-slate-500">
+                        {row.city}, {row.county}
+                        {row.closed ? " · closed" : ""}
+                        {row.jklDeficiency && <span className="text-amber-700"> · JKL, excluded from ranking</span>}
+                      </div>
+                    </td>
+                    <td className="py-3">
+                      <CompletenessText row={row} />
+                    </td>
+                    <td className="py-3">
+                      <span className="tabular-nums text-slate-900">
+                        {row.knownPoints}/{row.fullEligibleMax}
+                      </span>
+                      {row.unresolvedMax > 0 && <div className="text-xs text-amber-700">{row.unresolvedMax} unresolved</div>}
+                    </td>
+                    <td className="py-3">
+                      <NextOpportunity row={row} />
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setRemoveTarget(row)}
+                        className={cx("rounded-[var(--radius-control)] px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 hover:text-red-800", FOCUS_RING)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </TableRow>
                 ))}
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map(r => (
-                <tr
-                  key={r.facilityId}
-                  className="border-b border-slate-50 hover:bg-stone-50 cursor-pointer"
-                  onClick={() => navigate(`/facility/${r.facilityId}`)}
-                >
-                  <td className="px-4 py-3">
-                    <div className="text-slate-900 font-medium">{r.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {r.city}, {r.county}{r.closed ? " · closed" : ""}
-                      {r.jklDeficiency && <span className="text-amber-600"> · ⚠ JKL, excluded from ranking</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-mono text-slate-500">{r.score2023 ?? "—"}/100</div>
-                    <QuintileBadge quintile={r.quintile2023} />
-                  </td>
-                  <td className="px-4 py-3 font-mono text-slate-500">{r.coverage.measuresKnown}/{r.coverage.measuresTotal}</td>
-                  <td className="px-4 py-3 font-mono text-slate-700">
-                    {r.knownPoints}/{r.fullEligibleMax}
-                    {r.unresolvedMax > 0 && <div className="text-[10px] text-amber-600 font-sans">{r.unresolvedMax} unresolved</div>}
-                  </td>
-                  <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() => handleRemove(r.facilityId)}
-                      className="text-xs text-slate-400 hover:text-red-600"
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </Table>
+          </Card>
+
+          <div className="flex flex-col gap-3 md:hidden">
+            {visibleRows.map(row => (
+              <PortfolioFacilityCard key={row.facilityId} row={row} onRemove={setRemoveTarget} />
+            ))}
+          </div>
+        </>
+      )}
+
+      <p className="text-xs text-slate-500">
+        Known points are modeled against 2023 NY DOH cutpoints under cycle {CYCLE} rules — directional planning estimates, not official DOH
+        results. Overall quintile is not modeled for the current cycle. Full methodology is in Data &amp; settings.
+      </p>
+
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} title="Add a facility">
+        <FacilitySearch dataset={dataset} onAdd={handleAdd} alreadyTrackedIds={trackedIds} autoFocus />
+      </Dialog>
+
+      <Dialog open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove facility?">
+        {removeTarget && (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-slate-700">
+              This removes <strong>{removeTarget.name}</strong> from your portfolio and deletes all of its saved cycle {CYCLE} inputs on this
+              device. You can undo this for a few seconds right after removing it; after that it can't be recovered.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveTarget(null)}
+                className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50", FOCUS_RING)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemove}
+                className={cx("rounded-[var(--radius-control)] bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800", FOCUS_RING)}
+              >
+                Remove facility
+              </button>
+            </div>
           </div>
         )}
-      </div>
+      </Dialog>
 
-      <ul className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed list-disc list-inside space-y-1">
-        <li>Official result: DOH's published 0–100 score and ranked quintile for {dataset.year} (points ÷ max attainable, reduced only for DOH's own small-sample-size exclusions).</li>
-        <li>Known points (cycle {CYCLE}): modeled against 2023 NY DOH cutpoints using the 2025 attainment + improvement rules, out of a {90}-point maximum. Unresolved points come from missing or unscoreable inputs, not from a reduced denominator.</li>
-        <li>Overall quintile is not modeled for the current cycle anywhere in this app — NY's statewide peer cohort and tie-break method aren't sourced in this environment.</li>
-        <li>All current-cycle figures are directional planning estimates, not official DOH results.</li>
-      </ul>
+      {undo && (
+        <div
+          role="status"
+          className="fixed bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-[var(--radius-control)] border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg"
+        >
+          <span>Removed {undo.name}.</span>
+          <button type="button" onClick={handleUndo} className={cx("font-medium text-teal-300 hover:text-teal-200", FOCUS_RING)}>
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

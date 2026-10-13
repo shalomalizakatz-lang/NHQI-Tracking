@@ -1,20 +1,22 @@
 import { useState, useMemo, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
 import { getFacilityInputs, saveManualFieldValue, saveCmsAutofillField, savePahScenario, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
 import { MEASURES_2025, TRACKABLE_MEASURES_2025, SECTION_MAX_2025, CYCLE } from "../lib/nhqi/measures/2025.js";
 import { scoreFacility, buildPriorYearQuintilesFrom2023Actuals } from "../lib/nhqi/scorer.js";
 import { official2023Benchmark, liveCmsBenchmark } from "../lib/nhqi/benchmarks.js";
 import { getAutofillValue, cmsAutofillMeta, getLiveCutpoints } from "../lib/cmsAutofill.js";
-import MeasureRow from "../components/MeasureRow.jsx";
+import MeasuresPanel from "../components/MeasuresPanel.jsx";
 import PriorityList from "../components/PriorityList.jsx";
 import { downloadFacilityPdf } from "../lib/pdfExport.jsx";
+import Tabs from "../components/ui/Tabs.jsx";
+import Card from "../components/ui/Card.jsx";
+import Number from "../components/ui/Number.jsx";
+import SourceDetail from "../components/ui/SourceDetail.jsx";
+import SectionHeading from "../components/ui/SectionHeading.jsx";
+import { FOCUS_RING, cx } from "../components/ui/classNames.js";
 
-const SECTIONS = [
-  { key: "quality", label: "Quality Measures" },
-  { key: "compliance", label: "Compliance" },
-  { key: "efficiency", label: "Efficiency — PAH" },
-];
+const VALID_TABS = ["overview", "measures", "improvement-plan"];
 
 function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null;
@@ -51,12 +53,11 @@ function loadAndPrefill(facility, facilityId) {
 }
 
 export default function FacilityTracker() {
-  const { facilityId } = useParams();
+  const { facilityId, tab: tabParam } = useParams();
   const [dataset] = useState(() => loadActiveDataset());
   const facility = useMemo(() => findFacilityById(dataset, facilityId), [dataset, facilityId]);
   const portfolioEntry = useMemo(() => getPortfolio().find(p => p.facilityId === facilityId), [facilityId]);
 
-  const [tab, setTab] = useState("dashboard");
   const [vals, setVals] = useState({});
   const [starVals, setStarVals] = useState({});
   const [binaryVals, setBinaryVals] = useState({});
@@ -79,12 +80,18 @@ export default function FacilityTracker() {
 
   if (!facility) {
     return (
-      <div className="px-6 py-10 max-w-3xl mx-auto text-center text-slate-400">
+      <div className="px-6 py-10 max-w-3xl mx-auto text-center text-slate-500">
         Facility not found in the active dataset.
         <div className="mt-4"><Link to="/" className="text-blue-600 hover:underline">← Back to Portfolio</Link></div>
       </div>
     );
   }
+
+  // Garbage/legacy tab segments redirect to Overview rather than crash.
+  if (!VALID_TABS.includes(tabParam)) {
+    return <Navigate to={`/facility/${facilityId}/overview`} replace />;
+  }
+  const tab = tabParam;
 
   const setVal = (id, v) => {
     setVals(p => ({ ...p, [id]: v }));
@@ -125,94 +132,140 @@ export default function FacilityTracker() {
     setVals(vals); setStarVals(starVals); setBinaryVals(binaryVals); setPahScenario(pahScenario); setAutoFilled(autoSet);
   }
 
-  const TAB = active => ({
-    padding: "8px 18px", border: "none", background: "transparent",
-    color: active ? "#0f172a" : "#94a3b8", fontSize: 13, fontWeight: active ? 600 : 400,
-    cursor: "pointer", borderBottom: active ? "2px solid #0d9488" : "2px solid transparent",
-    fontFamily: "inherit",
-  });
+  const tabItems = [
+    { key: "overview", label: "Overview", to: `/facility/${facilityId}/overview` },
+    { key: "measures", label: "Measures", to: `/facility/${facilityId}/measures` },
+    { key: "improvement-plan", label: "Improvement Plan", to: `/facility/${facilityId}/improvement-plan` },
+  ];
 
   return (
-    <div>
-      <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 5, height: 26, background: "#0d9488", borderRadius: 2 }} />
-          <div>
-            <Link to="/" style={{ fontSize: 12, color: "#0d9488", textDecoration: "none" }}>← Portfolio</Link>
-            {renaming ? (
-              <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleRename()}
-                  style={{ background: "#fff", border: "1px solid #0d9488", borderRadius: 6, color: "#0f172a", padding: "2px 6px", fontSize: 14 }} />
-                <button onClick={handleRename} style={{ fontSize: 12, color: "#16a34a", background: "none", border: "none", cursor: "pointer" }}>Save</button>
-                <button onClick={() => setRenaming(false)} style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
-              </div>
-            ) : (
-              <div style={{ fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, color: "#0f172a" }}>
-                {displayName}
-                <button onClick={() => { setNameDraft(displayName); setRenaming(true); }}
-                  style={{ fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>✎ rename</button>
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: "#94a3b8" }}>
-              {facility.city}, {facility.county} · NHQI cycle {CYCLE}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link to="/" className={cx("text-xs font-medium text-teal-700 hover:text-teal-800", FOCUS_RING)}>
+            ← Portfolio
+          </Link>
+          {renaming ? (
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                autoFocus
+                value={nameDraft}
+                onChange={e => setNameDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") handleRename();
+                  if (e.key === "Escape") setRenaming(false);
+                }}
+                aria-label="Facility display name"
+                className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-2 py-1 text-base text-slate-900", FOCUS_RING)}
+              />
+              <button type="button" onClick={handleRename} className={cx("text-sm font-medium text-green-700", FOCUS_RING)}>
+                Save
+              </button>
+              <button type="button" onClick={() => setRenaming(false)} className={cx("text-sm text-slate-500", FOCUS_RING)}>
+                Cancel
+              </button>
             </div>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>Saved on this device</div>
-          </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-slate-900">{displayName}</h1>
+              <button
+                type="button"
+                onClick={() => {
+                  setNameDraft(displayName);
+                  setRenaming(true);
+                }}
+                aria-label={`Rename ${displayName}`}
+                className={cx("rounded-[var(--radius-control)] px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-600", FOCUS_RING)}
+              >
+                rename
+              </button>
+            </div>
+          )}
+          <p className="mt-0.5 text-sm text-slate-500">
+            {facility.city}, {facility.county} · NHQI cycle {CYCLE} · Saved on this device
+          </p>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <select value={benchmarkChoice} onChange={e => setBenchmarkChoice(e.target.value)}
-            style={{ fontSize: 12, border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 8px", color: "#0f172a", background: "#fff" }}>
+        <div className="flex shrink-0 items-center gap-2">
+          <label className="sr-only" htmlFor="benchmark-choice">
+            Benchmark
+          </label>
+          <select
+            id="benchmark-choice"
+            value={benchmarkChoice}
+            onChange={e => setBenchmarkChoice(e.target.value)}
+            className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-2.5 py-1.5 text-sm text-slate-900", FOCUS_RING)}
+          >
             <option value="2023">Modeled against 2023 NY DOH cutpoints</option>
             <option value="live">Latest public NY benchmark (CMS)</option>
           </select>
           <button
+            type="button"
             onClick={() => downloadFacilityPdf({ dataset, facility, displayName, vals, starVals, binaryVals, verifications, pahScenario, benchmarkChoice, priorYearQuintiles })}
-            style={{ background: "#0d9488", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}
+            className={cx("rounded-[var(--radius-control)] bg-teal-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-teal-800", FOCUS_RING)}
           >
-            ⬇ Export PDF
+            Export PDF
           </button>
         </div>
       </div>
 
       {scored.eligibilityBlocked && (
-        <div style={{ background: "#fef3c7", borderBottom: "1px solid #fde68a", padding: "8px 22px", fontSize: 12, color: "#92400e" }}>
-          ⚠ {scored.eligibilityReason}
+        <div className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+          {scored.eligibilityReason}
         </div>
       )}
 
-      <div style={{ background: "#fafaf9", borderBottom: "1px solid #e2e8f0", padding: "8px 22px", fontSize: 12, color: "#475569", display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <span>Coverage: <strong>{scored.coverage.measuresKnown}/{scored.coverage.measuresTotal}</strong> measures resolved</span>
-        <span>Known points: <strong style={{ color: "#0d9488" }}>{scored.knownEarnedPoints}</strong></span>
-        <span>Unresolved: <strong style={{ color: "#b45309" }}>{scored.unresolvedMaxPoints}</strong> of {scored.fullEligibleMax} max</span>
-        <span>Benchmark: <strong>{scored.benchmark?.label}</strong>{scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""}</span>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 rounded-[var(--radius-control)] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-600">
+        <span>
+          Coverage: <strong className="tabular-nums text-slate-900">{scored.coverage.measuresKnown}/{scored.coverage.measuresTotal}</strong> measures resolved
+        </span>
+        <span>
+          Known points: <strong className="tabular-nums text-teal-700">{scored.knownEarnedPoints}</strong>
+        </span>
+        <span>
+          Unresolved: <strong className="tabular-nums text-amber-800">{scored.unresolvedMaxPoints}</strong> of {scored.fullEligibleMax} max
+        </span>
+        <span>
+          Benchmark: <strong className="text-slate-900">{scored.benchmark?.label}</strong>
+          {scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""}
+        </span>
       </div>
 
       {missingFields.length > 0 && (
-        <div style={{ background: "#fffbeb", borderBottom: "1px solid #fde68a", padding: "8px 22px", fontSize: 12, color: "#92400e" }}>
+        <div className="rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
           Incomplete — {missingFields.length} input{missingFields.length === 1 ? "" : "s"} missing: {missingFields.join(", ")}
         </div>
       )}
 
-      <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", padding: "0 22px", display: "flex", gap: 2 }}>
-        <button style={TAB(tab === "dashboard")} onClick={() => setTab("dashboard")}>Overview</button>
-        <button style={TAB(tab === "measures")} onClick={() => setTab("measures")}>Measures</button>
-        <button style={TAB(tab === "priority")} onClick={() => setTab("priority")}>Improvement Plan</button>
-      </div>
+      <Tabs items={tabItems} activeKey={tab} label="Facility sections" />
 
-      <div style={{ padding: "20px 22px", maxWidth: 820, margin: "0 auto" }}>
-        {tab === "dashboard" && (
-          <DashboardTab dataset={dataset} facility={facility} scored={scored} pahScenario={pahScenario} setPah={setPah} />
+      <div className="mx-auto w-full max-w-3xl">
+        {tab === "overview" && (
+          <OverviewTab dataset={dataset} facility={facility} scored={scored} pahScenario={pahScenario} setPah={setPah} />
         )}
         {tab === "measures" && (
-          <MeasuresTab dataset={dataset} facility={facility} vals={vals} starVals={starVals} binaryVals={binaryVals} autoFilled={autoFilled}
-            scored={scored} benchmark={benchmark}
-            setVal={setVal} setStar={setStar} setBinary={setBinary} onReset={handleReset} />
+          <MeasuresPanel
+            key={facilityId}
+            dataset={dataset}
+            facility={facility}
+            vals={vals}
+            starVals={starVals}
+            binaryVals={binaryVals}
+            autoFilled={autoFilled}
+            scored={scored}
+            benchmark={benchmark}
+            pahScenario={pahScenario}
+            setPah={setPah}
+            setVal={setVal}
+            setStar={setStar}
+            setBinary={setBinary}
+            onReset={handleReset}
+          />
         )}
-        {tab === "priority" && (
+        {tab === "improvement-plan" && (
           <div>
-            <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
-              <strong>{scored.benchmark?.label}</strong>{scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""} · cycle {CYCLE}. Overall quintile is not modeled this pass — see Overview.
+            <div className="mb-4 rounded-[var(--radius-control)] border border-teal-200 bg-teal-50 px-3.5 py-2.5 text-sm text-teal-900">
+              <strong className="font-semibold">{scored.benchmark?.label}</strong>
+              {scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""} · cycle {CYCLE}. Overall quintile is not modeled this pass — see Overview.
             </div>
             <PriorityList scored={scored} />
           </div>
@@ -222,48 +275,44 @@ export default function FacilityTracker() {
   );
 }
 
-function DashboardTab({ dataset, facility, scored, pahScenario, setPah }) {
+function OverviewTab({ dataset, facility, scored, pahScenario, setPah }) {
   const official2023Total = facility.totalScore ?? null;
   const official2023Quintile = facility.overallQuintile ?? null;
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>Official {dataset.year} result</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1 }}>
-            {official2023Total ?? "—"}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/100</span>
-          </div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-3">
+        <Card className="flex-1 basis-56 p-4">
+          <SourceDetail label={`Official ${dataset.year} result`} />
+          <Number value={official2023Total} denominator="100" size="lg" />
+          <p className="mt-1 text-xs text-slate-500">
             {official2023Quintile ? `Published quintile Q${official2023Quintile}` : "No published quintile on file"}
-          </div>
-        </div>
+          </p>
+        </Card>
 
-        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 6 }}>Known points, cycle {CYCLE}</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#0d9488", fontFamily: "monospace", lineHeight: 1 }}>
-            {scored.knownEarnedPoints}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{scored.fullEligibleMax}</span>
-          </div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+        <Card className="flex-1 basis-56 p-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-teal-700">Known points, cycle {CYCLE}</span>
+          <Number value={scored.knownEarnedPoints} denominator={String(scored.fullEligibleMax)} size="lg" className="mt-1" />
+          <p className="mt-1 text-xs text-slate-500">
             {scored.unresolvedMaxPoints} point{scored.unresolvedMaxPoints === 1 ? "" : "s"} unresolved · {scored.coverage.measuresKnown}/{scored.coverage.measuresTotal} measures
-          </div>
-        </div>
+          </p>
+        </Card>
 
-        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>Overall quintile</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#94a3b8" }}>Not modeled</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, lineHeight: 1.4 }}>{scored.overallQuintile.reason}</div>
-        </div>
+        <Card className="flex-1 basis-56 p-4">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Overall quintile</span>
+          <p className="mt-1 text-lg font-semibold text-slate-500">Not modeled</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">{scored.overallQuintile.reason}</p>
+        </Card>
       </div>
 
       {scored.normalizedScore && (
-        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginBottom: 14, fontSize: 13, color: "#475569" }}>
-          Normalized score (all {scored.coverage.measuresTotal} measures resolved): <strong>{scored.normalizedScore.value}</strong> ({scored.normalizedScore.basis}) — {scored.benchmark?.label}, not an official figure.
-        </div>
+        <Card className="p-4 text-sm text-slate-600">
+          Normalized score (all {scored.coverage.measuresTotal} measures resolved): <strong className="tabular-nums text-slate-900">{scored.normalizedScore.value}</strong> ({scored.normalizedScore.basis}) — {scored.benchmark?.label}, not an official figure.
+        </Card>
       )}
 
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 12 }}>Points by section</div>
+      <Card className="p-4">
+        <SectionHeading className="mb-3">Points by section</SectionHeading>
         {["quality", "compliance", "efficiency"].map(sec => {
           const measures = MEASURES_2025.filter(m => m.section === sec);
           const max = SECTION_MAX_2025[sec];
@@ -274,90 +323,58 @@ function DashboardTab({ dataset, facility, scored, pahScenario, setPah }) {
           const pct23 = (pts23 / max) * 100;
           const pctCurrent = (ptsCurrent / max) * 100;
           return (
-            <div key={sec} style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4, fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: "#475569", textTransform: "capitalize", fontWeight: 600 }}>{sec}</span>
-                <span style={{ fontFamily: "monospace", fontSize: 11 }}>
+            <div key={sec} className="mb-4 last:mb-0">
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-1 text-xs">
+                <span className="font-semibold capitalize text-slate-600">{sec}</span>
+                <span className="tabular-nums text-slate-500">
                   official {pts23}/{max} · known {ptsCurrent}/{max} ({known.length}/{sectionRows.length} resolved)
                 </span>
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>official {dataset.year}</div>
-              <div style={{ position: "relative", background: "#f0efed", borderRadius: 3, height: 6, marginBottom: 4 }}>
-                <div style={{ position: "absolute", left: 0, top: 0, width: `${pct23}%`, height: "100%", background: "#cbd5e1", borderRadius: 3 }} />
+              <div className="mb-0.5 text-[10px] text-slate-500">official {dataset.year}</div>
+              <div className="mb-1 h-1.5 rounded-full bg-[var(--color-border-subtle)]">
+                <div className="h-full rounded-full bg-slate-300" style={{ width: `${pct23}%` }} />
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>known, cycle {CYCLE}</div>
-              <div style={{ position: "relative", background: "#f0efed", borderRadius: 3, height: 6 }}>
-                <div style={{ position: "absolute", left: 0, top: 0, width: `${pctCurrent}%`, height: "100%", background: "#0d9488", borderRadius: 3 }} />
+              <div className="mb-0.5 text-[10px] text-slate-500">known, cycle {CYCLE}</div>
+              <div className="h-1.5 rounded-full bg-[var(--color-border-subtle)]">
+                <div className="h-full rounded-full bg-teal-600" style={{ width: `${pctCurrent}%` }} />
               </div>
             </div>
           );
         })}
-      </div>
+      </Card>
 
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>Potentially Avoidable Hospitalizations (PAH)</div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10 }}>
-          Official {dataset.year}: {facility.actuals?.pah?.value ?? "—"} {facility.actuals?.pah ? "/10k days" : ""} · {facility.actuals?.pah?.points ?? "—"}/10 pts.
-          Not self-trackable — requires DOH's quarterly MDS→SPARCS match.
-        </div>
-        <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>Scenario for cycle {CYCLE} planning:</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <Card className="p-4">
+        <SectionHeading className="mb-1">Potentially Avoidable Hospitalizations (PAH)</SectionHeading>
+        <p className="mb-3 text-xs text-slate-500">
+          Official {dataset.year}: {facility.actuals?.pah?.value ?? "—"} {facility.actuals?.pah ? "/10k days" : ""} · {facility.actuals?.pah?.points ?? "—"}/10 pts. Not
+          self-trackable — requires DOH's quarterly MDS→SPARCS match.
+        </p>
+        <p className="mb-2 text-sm text-slate-600">Scenario for cycle {CYCLE} planning:</p>
+        <div className="flex flex-wrap gap-1.5">
           {[null, "official", 0, 2, 6, 8, 10].map(opt => (
-            <button key={String(opt)} onClick={() => setPah(opt)}
-              style={{
-                fontSize: 11, padding: "5px 10px", borderRadius: 6, cursor: "pointer",
-                border: `1px solid ${pahScenario === opt ? "#0d9488" : "#e2e8f0"}`,
-                background: pahScenario === opt ? "#0d9488" : "#fff",
-                color: pahScenario === opt ? "#fff" : "#475569",
-              }}>
+            <button
+              key={String(opt)}
+              type="button"
+              onClick={() => setPah(opt)}
+              aria-pressed={pahScenario === opt}
+              className={cx(
+                "rounded-full border px-2.5 py-1 text-xs font-medium",
+                pahScenario === opt ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                FOCUS_RING
+              )}
+            >
               {opt === null ? "Unresolved" : opt === "official" ? `Use official ${dataset.year}` : `${opt} pts`}
             </button>
           ))}
         </div>
-      </div>
+      </Card>
 
-      <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        Official {dataset.year} results are NY DOH's published NHQI figures for {facility.name}, from {dataset.source}. Known/unresolved points above are modeled against cycle {CYCLE} rules (attainment + improvement matrix where applicable) and the selected benchmark — not an official DOH-certified figure. An overall quintile is not modeled this pass: NY's statewide peer cohort and tie-break method aren't sourced in this environment. Independent planning tool. Not affiliated with NY DOH.
-      </div>
+      <p className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[#fafaf9] px-3.5 py-2.5 text-xs leading-relaxed text-slate-500">
+        Official {dataset.year} results are NY DOH's published NHQI figures for {facility.name}, from {dataset.source}. Known/unresolved points above are modeled against cycle {CYCLE} rules
+        (attainment + improvement matrix where applicable) and the selected benchmark — not an official DOH-certified figure. An overall quintile is not modeled this pass: NY's statewide peer
+        cohort and tie-break method aren't sourced in this environment. Independent planning tool. Not affiliated with NY DOH.
+      </p>
     </div>
   );
 }
 
-function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled, scored, benchmark, setVal, setStar, setBinary, onReset }) {
-  const bySection = key => MEASURES_2025.filter(m => m.section === key);
-  const refreshedDate = fmtDate(cmsAutofillMeta.generatedAt);
-  const byId = Object.fromEntries(scored.perMeasure.map(r => [r.measure.id, r]));
-
-  return (
-    <div>
-      <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Enter this facility's current-cycle numbers. Benchmark: {scored.benchmark?.label}.</span>
-          <button onClick={onReset} style={{ background: "#fff", border: "1px solid #99f6e4", borderRadius: 6, color: "#0d9488", fontSize: 11, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      {autoFilled.size > 0 && (
-        <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 12 }}>
-          * = pre-filled from CMS Care Compare (data.cms.gov), not NY DOH's figures — verify and edit to override.
-          {refreshedDate && ` Last CMS pull: ${refreshedDate}.`}
-        </div>
-      )}
-
-      {SECTIONS.map(sec => (
-        <div key={sec.key}>
-          <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, margin: "18px 0 10px" }}>
-            {sec.label} — {SECTION_MAX_2025[sec.key]} pts max
-          </div>
-          {bySection(sec.key).map(m => (
-            <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} scored={byId[m.id]} benchmark={benchmark} year={dataset.year}
-              val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""} isAutofilled={autoFilled.has(m.id)}
-              onValChange={v => setVal(m.id, v)} onStarChange={v => setStar(m.id, v)} onBinaryChange={v => setBinary(m.id, v)} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}

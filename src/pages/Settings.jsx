@@ -3,6 +3,11 @@ import { loadActiveDataset, saveCustomDataset, clearCustomDataset, hasCustomData
 import { exportBackup, importBackup } from "../lib/storage.js";
 import { parseNhqiCsv } from "../lib/csvImport.js";
 import { cmsAutofillMeta } from "../lib/cmsAutofill.js";
+import { CYCLE } from "../lib/nhqi/measures/2025.js";
+import PageHeader from "../components/ui/PageHeader.jsx";
+import SectionHeading from "../components/ui/SectionHeading.jsx";
+import Card from "../components/ui/Card.jsx";
+import { FOCUS_RING, cx } from "../components/ui/classNames.js";
 
 const REFRESH_WORKFLOW_URL = "https://github.com/shalomalizakatz-lang/NHQI-Tracking/actions/workflows/refresh-cms-data.yml";
 
@@ -86,26 +91,27 @@ export default function Settings() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-3xl mx-auto space-y-6">
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-slate-900 mb-2">Active dataset</div>
-        <div className="text-sm text-slate-500">
+    <div className="flex max-w-3xl flex-col gap-5">
+      <PageHeader title="Data & settings" context={`Cycle ${CYCLE} rules · benchmark cutpoints, source data, and local backup`} />
+
+      <Card className="p-5">
+        <SectionHeading className="mb-2">Active benchmark dataset</SectionHeading>
+        <p className="text-sm text-slate-600">
           {dataset.year} — {dataset.facilities.length} facilities · {dataset.source}
-        </div>
+        </p>
         {hasCustomDataset() && (
-          <button onClick={handleRevert} className="mt-3 text-xs text-slate-400 hover:text-red-600 underline">
+          <button type="button" onClick={handleRevert} className={cx("mt-3 text-xs text-slate-500 underline hover:text-red-700", FOCUS_RING)}>
             Revert to bundled 2023 dataset
           </button>
         )}
-      </div>
+      </Card>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-slate-900 mb-2">Refresh cut points</div>
-        <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-          DOH recalculates NHQI cut points annually. Upload a new export in the same long-format CSV structure
-          (one row per facility × measure, with First–Fifth Quintile columns) to refresh the benchmarks used
-          across the portfolio. Facilities are matched by DOH Facility ID; your tracked portfolio and entered
-          current-cycle numbers are preserved. Nothing is activated until you review the preview below and confirm.
+      <Card className="p-5">
+        <SectionHeading className="mb-2">Refresh cutpoints from a new DOH export</SectionHeading>
+        <p className="mb-4 text-sm leading-relaxed text-slate-600">
+          DOH recalculates NHQI cutpoints annually. Upload a new export in the same long-format CSV (one row per facility × measure, with First–Fifth
+          Quintile columns) to refresh the benchmarks used across the portfolio. Facilities are matched by their DOH Facility ID; your tracked portfolio
+          and entered current-cycle numbers are preserved either way. Nothing is activated until you review the preview below and confirm.
         </p>
         <input
           ref={fileRef}
@@ -113,84 +119,100 @@ export default function Settings() {
           accept=".csv,text/csv"
           onChange={handleFile}
           disabled={busy}
-          className="text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-teal-600 file:text-white file:text-sm hover:file:bg-teal-700 file:cursor-pointer"
+          aria-label="Upload a new DOH NHQI CSV export"
+          className="text-sm text-slate-600 file:mr-3 file:cursor-pointer file:rounded-[var(--radius-control)] file:border-0 file:bg-teal-700 file:px-3 file:py-1.5 file:text-sm file:text-white hover:file:bg-teal-800"
         />
-        {busy && <div className="mt-2 text-xs text-amber-600">Parsing…</div>}
+        {busy && <p className="mt-2 text-xs text-amber-700">Parsing…</p>}
 
         {pendingImport && (
-          <div className="mt-4 border border-slate-200 rounded-lg p-4 bg-stone-50">
-            <div className="text-sm font-semibold text-slate-900 mb-2">Preview — not yet activated</div>
-            <div className="text-xs text-slate-600 space-y-1 mb-3">
-              <div>Measurement year: <strong>{pendingImport.parsed.year}</strong></div>
-              <div>Facilities: <strong>{pendingImport.parsed.validation.facilityCount}</strong> ({pendingImport.parsed.validation.dataRowCount} data rows)</div>
-              <div>Measures recognized: <strong>{pendingImport.parsed.validation.measuresRecognized}/{pendingImport.parsed.validation.measuresTotalDefined}</strong></div>
+          <Card className="mt-4 bg-[#fafaf9] p-4">
+            <p className="mb-2 text-sm font-semibold text-slate-900">Preview — not yet activated</p>
+            <div className="mb-3 space-y-1 text-xs text-slate-600">
+              <div>
+                Measurement year: <strong>{pendingImport.parsed.year}</strong>
+              </div>
+              <div>
+                Facilities: <strong>{pendingImport.parsed.validation.facilityCount}</strong> ({pendingImport.parsed.validation.dataRowCount} data rows)
+              </div>
+              <div>
+                Measures recognized: <strong>{pendingImport.parsed.validation.measuresRecognized}/{pendingImport.parsed.validation.measuresTotalDefined}</strong>
+              </div>
             </div>
-            {pendingImport.parsed.validation.warnings.length > 0 && (
-              <ul className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3 mb-3 space-y-1 list-disc list-inside">
-                {pendingImport.parsed.validation.warnings.map((w, i) => <li key={i}>{w}</li>)}
+            {pendingImport.parsed.validation.warnings.length > 0 ? (
+              <ul className="mb-3 list-inside list-disc space-y-1 rounded-[var(--radius-control)] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                {pendingImport.parsed.validation.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
               </ul>
-            )}
-            {pendingImport.parsed.validation.warnings.length === 0 && (
-              <div className="text-xs text-green-700 mb-3">No validation warnings.</div>
+            ) : (
+              <p className="mb-3 text-xs text-green-700">No validation warnings.</p>
             )}
             <div className="flex gap-2">
-              <button onClick={handleActivateImport} className="text-xs bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-3 py-1.5">
+              <button type="button" onClick={handleActivateImport} className={cx("rounded-[var(--radius-control)] bg-teal-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-800", FOCUS_RING)}>
                 Activate this dataset
               </button>
-              <button onClick={handleCancelImport} className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5">
+              <button type="button" onClick={handleCancelImport} className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50", FOCUS_RING)}>
                 Cancel
               </button>
             </div>
-          </div>
+          </Card>
         )}
 
         {status && (
-          <div className={`mt-3 text-xs px-3 py-2 rounded-lg border ${status.type === "success" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+          <div className={cx("mt-3 rounded-[var(--radius-control)] border px-3 py-2 text-xs", status.type === "success" ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-800")}>
             {status.msg}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-slate-900 mb-2">CMS auto-fill &amp; live benchmark</div>
-        <p className="text-sm text-slate-500 mb-1 leading-relaxed">
-          Pre-filled current-cycle values and the Live NY-wide quintile benchmark are pulled from CMS Care Compare
-          by a GitHub Actions workflow — scheduled monthly, or run manually any time.
+      <Card className="p-5">
+        <SectionHeading className="mb-2">CMS auto-fill &amp; live benchmark</SectionHeading>
+        <p className="mb-1 text-sm leading-relaxed text-slate-600">
+          Pre-filled current-cycle values and the Live NY-wide quintile benchmark are pulled from CMS Care Compare by a scheduled job — this app only reads
+          its output, it doesn't run it.
         </p>
-        <p className="text-xs text-slate-400 mb-4">
-          {refreshedDate ? `Last refreshed ${refreshedDate}.` : "Not yet refreshed."}
-        </p>
+        <p className="mb-4 text-xs text-slate-500">{refreshedDate ? `Last refreshed ${refreshedDate}.` : "Not yet refreshed."}</p>
         <a
           href={REFRESH_WORKFLOW_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-3 py-1.5"
+          className={cx("inline-block rounded-[var(--radius-control)] bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200", FOCUS_RING)}
         >
-          Refresh on GitHub →
+          Run or inspect the refresh job on GitHub ↗
         </a>
-      </div>
+      </Card>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="text-sm font-semibold text-slate-900 mb-2">Backup &amp; restore</div>
-        <p className="text-sm text-slate-500 mb-4 leading-relaxed">
-          Your tracked portfolio and entered current-cycle numbers are saved only on this device (browser local
-          storage) — there's no account or server copy. Export a backup periodically, or before clearing browser
-          data.
+      <Card className="p-5">
+        <SectionHeading className="mb-2">Backup &amp; restore</SectionHeading>
+        <p className="mb-4 text-sm leading-relaxed text-slate-600">
+          Your tracked portfolio and entered current-cycle numbers are saved only on this device (browser local storage) — there's no account or server
+          copy. Export a backup periodically, or before clearing browser data.
         </p>
-        <div className="flex gap-2 items-center flex-wrap">
-          <button onClick={handleExportBackup} className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={handleExportBackup} className={cx("rounded-[var(--radius-control)] border border-slate-500/50 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50", FOCUS_RING)}>
             Export backup
           </button>
-          <input ref={backupFileRef} type="file" accept=".json,application/json" onChange={handleImportBackup}
-            className="text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-white file:border file:border-slate-200 file:text-slate-700 file:text-sm hover:file:border-slate-300 file:cursor-pointer" />
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleImportBackup}
+            aria-label="Restore from backup file"
+            className="text-sm text-slate-600 file:mr-3 file:cursor-pointer file:rounded-[var(--radius-control)] file:border file:border-slate-500/50 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700 hover:file:bg-slate-50"
+          />
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-stone-100 border border-stone-200 rounded-xl p-5 text-xs text-slate-500 leading-relaxed">
-        PAH (Potentially Avoidable Hospitalizations) can't be self-tracked in real time — it requires DOH's
-        MDS→SPARCS claims match, which is only available once DOH publishes the next NHQI dataset. It's excluded
-        entirely from every facility's current-cycle projection rather than estimated.
-      </div>
+      <Card className="p-5">
+        <SectionHeading className="mb-2">Methodology notes</SectionHeading>
+        <ul className="list-inside list-disc space-y-1.5 text-xs leading-relaxed text-slate-500">
+          <li>Official result: DOH's published 0–100 score and ranked quintile for {dataset.year} (points ÷ max attainable, reduced only for DOH's own small-sample-size exclusions).</li>
+          <li>Known points (cycle {CYCLE}): modeled against the selected benchmark's cutpoints using the 2025 attainment + improvement rules, out of a 90-point maximum. Unresolved points come from missing or unscoreable inputs, not from a reduced denominator.</li>
+          <li>Overall quintile is not modeled for the current cycle anywhere in this app — NY's statewide peer cohort and tie-break method aren't sourced in this environment.</li>
+          <li>PAH (Potentially Avoidable Hospitalizations) can't be self-tracked in real time — it requires DOH's MDS→SPARCS claims match, only available once DOH publishes the next NHQI dataset. It's excluded from every facility's current-cycle projection rather than estimated.</li>
+          <li>All current-cycle figures are directional planning estimates, not official DOH results. Independent planning tool. Not affiliated with NY DOH.</li>
+        </ul>
+      </Card>
     </div>
   );
 }

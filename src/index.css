@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Mirrors src/lib/designTokens.js's values by hand (react-pdf can't read CSS
+   custom properties, so that JS module is the other source of truth -- keep
+   both in sync when a value here changes). Referenced from components via
+   Tailwind's arbitrary-value syntax, e.g. border-[var(--color-border-subtle)],
+   rather than relying on Tailwind's auto-generated utility names for these. */
+@theme {
+  --color-surface: #ffffff;
+  --color-border-subtle: #f0efed;
+  --radius-control: 0.5rem;
+}
+
 :root {
   color-scheme: light;
 }
