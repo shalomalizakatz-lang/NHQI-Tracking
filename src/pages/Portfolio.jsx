@@ -1,23 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
-import { getPortfolio, addFacility, removeFacility, getAllInputs } from "../lib/storage.js";
-import { computeFacilitySummary, TRACKABLE_MAX } from "../lib/scoring.js";
-import { getLiveCutpoints } from "../lib/cmsAutofill.js";
+import { getPortfolio, addFacility, removeFacility, getAllPlainInputs } from "../lib/storage.js";
+import { scoreFacility, buildPriorYearQuintilesFrom2023Actuals } from "../lib/nhqi/scorer.js";
+import { official2023Benchmark } from "../lib/nhqi/benchmarks.js";
+import { CYCLE } from "../lib/nhqi/measures/2025.js";
 import FacilitySearch from "../components/FacilitySearch.jsx";
 import QuintileBadge from "../components/QuintileBadge.jsx";
+
+const columns = [
+  { key: "name", label: "Facility" },
+  { key: "score2023", label: "Official result" },
+  { key: "coverage", label: "Coverage" },
+  { key: "knownPoints", label: `Known points, cycle ${CYCLE}` },
+];
 
 export default function Portfolio() {
   const navigate = useNavigate();
   const [dataset] = useState(() => loadActiveDataset());
-  const columns = useMemo(() => [
-    { key: "name", label: "Facility" },
-    { key: "score2023", label: `${dataset.year} Score` },
-    { key: "quintile2023", label: `${dataset.year} Quintile` },
-    { key: "score2025", label: `Current Score (of ${TRACKABLE_MAX})` },
-    { key: "quintile2027", label: "Est. Quintile" },
-    { key: "ptsDelta", label: `Pts Delta (from ${dataset.year} DOH)` },
-  ], [dataset.year]);
   const [portfolio, setPortfolio] = useState(() => getPortfolio());
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
@@ -25,19 +25,28 @@ export default function Portfolio() {
   useEffect(() => setPortfolio(getPortfolio()), []);
 
   const rows = useMemo(() => {
-    const inputsAll = getAllInputs();
+    const inputsAll = getAllPlainInputs();
     return portfolio
       .map(entry => {
         const facility = findFacilityById(dataset, entry.facilityId);
         if (!facility) return null;
-        const summary = computeFacilitySummary(dataset, facility, inputsAll[entry.facilityId], getLiveCutpoints);
+        const benchmark = official2023Benchmark(dataset, facility);
+        const priorYearQuintiles = buildPriorYearQuintilesFrom2023Actuals(facility);
+        const inputs = inputsAll[entry.facilityId] || { vals: {}, starVals: {}, binaryVals: {}, pahScenario: null };
+        const scored = scoreFacility({ facility, inputs, benchmark, priorYearQuintiles });
         return {
           facilityId: entry.facilityId,
           name: entry.displayName || facility.name,
           city: facility.city,
           county: facility.county,
           closed: facility.closed,
-          ...summary,
+          jklDeficiency: facility.jklDeficiency,
+          score2023: facility.totalScore ?? null,
+          quintile2023: facility.overallQuintile ?? null,
+          coverage: scored.coverage,
+          knownPoints: scored.knownEarnedPoints,
+          unresolvedMax: scored.unresolvedMaxPoints,
+          fullEligibleMax: scored.fullEligibleMax,
         };
       })
       .filter(Boolean);
@@ -46,7 +55,9 @@ export default function Portfolio() {
   const sortedRows = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => {
-      const av = a[sortKey], bv = b[sortKey];
+      const key = sortKey === "coverage" ? "coverage" : sortKey;
+      const av = key === "coverage" ? a.coverage.measuresKnown : a[sortKey];
+      const bv = key === "coverage" ? b.coverage.measuresKnown : b[sortKey];
       if (av === null || av === undefined) return 1;
       if (bv === null || bv === undefined) return -1;
       if (typeof av === "string") return av.localeCompare(bv) * dir;
@@ -65,7 +76,7 @@ export default function Portfolio() {
   }
 
   function handleRemove(facilityId) {
-    if (!window.confirm("Remove this facility from your tracked portfolio? Its entered current data will be deleted.")) return;
+    if (!window.confirm("Remove this facility from your tracked portfolio? Its entered current-cycle data will be deleted.")) return;
     removeFacility(facilityId);
     setPortfolio(getPortfolio());
   }
@@ -76,7 +87,11 @@ export default function Portfolio() {
     <div className="px-6 py-6 max-w-6xl mx-auto">
       <FacilitySearch dataset={dataset} onAdd={handleAdd} alreadyTrackedIds={trackedIds} />
 
-      <div className="mt-6 bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="mt-2 text-xs text-slate-400">
+        Modeled against 2023 NY DOH cutpoints · cycle {CYCLE} rules · Saved on this device · Independent planning tool. Not affiliated with NY DOH.
+      </div>
+
+      <div className="mt-4 bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-900">
           Portfolio — {sortedRows.length} facilit{sortedRows.length === 1 ? "y" : "ies"} tracked
         </div>
@@ -115,22 +130,14 @@ export default function Portfolio() {
                       {r.jklDeficiency && <span className="text-amber-600"> · ⚠ JKL, excluded from ranking</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-slate-500">{r.score2023}/100</td>
-                  <td className="px-4 py-3"><QuintileBadge quintile={r.quintile2023} /></td>
-                  <td className="px-4 py-3 font-mono text-slate-500">
-                    <div><span className="text-[10px] text-slate-400 font-sans mr-1">DOH</span>{r.score2025 !== null ? `${r.score2025}/${TRACKABLE_MAX}` : "—"}</div>
-                    {r.score2025Live !== null && <div className="text-purple-600"><span className="text-[10px] font-sans mr-1">Live</span>{r.score2025Live}/{r.liveMax}</div>}
-                  </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1"><span className="text-[10px] text-slate-400">DOH</span><QuintileBadge quintile={r.quintile2027} /></div>
-                    {r.quintile2027Live !== null && <div className="flex items-center gap-1 mt-1"><span className="text-[10px] text-purple-600">Live</span><QuintileBadge quintile={r.quintile2027Live} /></div>}
+                    <div className="font-mono text-slate-500">{r.score2023 ?? "—"}/100</div>
+                    <QuintileBadge quintile={r.quintile2023} />
                   </td>
-                  <td className="px-4 py-3 font-mono">
-                    {r.ptsDelta !== null ? (
-                      <span className={r.ptsDelta > 0 ? "text-green-600" : r.ptsDelta < 0 ? "text-red-600" : "text-slate-400"}>
-                        {r.ptsDelta > 0 ? `+${r.ptsDelta}` : r.ptsDelta}
-                      </span>
-                    ) : "—"}
+                  <td className="px-4 py-3 font-mono text-slate-500">{r.coverage.measuresKnown}/{r.coverage.measuresTotal}</td>
+                  <td className="px-4 py-3 font-mono text-slate-700">
+                    {r.knownPoints}/{r.fullEligibleMax}
+                    {r.unresolvedMax > 0 && <div className="text-[10px] text-amber-600 font-sans">{r.unresolvedMax} unresolved</div>}
                   </td>
                   <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                     <button
@@ -149,11 +156,10 @@ export default function Portfolio() {
       </div>
 
       <ul className="mt-4 px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-slate-500 leading-relaxed list-disc list-inside space-y-1">
-        <li>{dataset.year} Score: DOH's official 0–100 score (points ÷ max attainable), not raw points out of 90.</li>
-        <li>DOH / Live rows: DOH = frozen {dataset.year} cut points, Live = live NY-wide benchmark (directional, not DOH-certified).</li>
-        <li>PAH is excluded throughout — it can't be self-tracked.</li>
-        <li>Pts Delta compares Current Score to {dataset.year} on the same PAH-excluded, {TRACKABLE_MAX}-point basis — not a raw subtraction of the two scores above.</li>
-        <li>All projections are directional, not guaranteed.</li>
+        <li>Official result: DOH's published 0–100 score and ranked quintile for {dataset.year} (points ÷ max attainable, reduced only for DOH's own small-sample-size exclusions).</li>
+        <li>Known points (cycle {CYCLE}): modeled against 2023 NY DOH cutpoints using the 2025 attainment + improvement rules, out of a {90}-point maximum. Unresolved points come from missing or unscoreable inputs, not from a reduced denominator.</li>
+        <li>Overall quintile is not modeled for the current cycle anywhere in this app — NY's statewide peer cohort and tie-break method aren't sourced in this environment.</li>
+        <li>All current-cycle figures are directional planning estimates, not official DOH results.</li>
       </ul>
     </div>
   );

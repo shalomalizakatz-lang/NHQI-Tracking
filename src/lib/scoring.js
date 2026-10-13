@@ -3,6 +3,18 @@
 // and are resolved per-facility by region, since DOH regionally adjusts some measures
 // (e.g. nursing staff turnover differs for MARO vs. WRO/CNYRO/CDRO).
 //
+// SCOPE NOTE: this module now holds only the primitives needed to read/display OFFICIAL
+// historical DOH facts (facility.actuals' real values/quintiles/points, the bundled cutpoint
+// tables, the boundary comparison logic) — it is not a scoring engine for the current
+// projection cycle anymore. That's src/lib/nhqi/scorer.js, which has its own versioned
+// measure definitions, attainment table, and improvement matrix for the 2025 cycle, and is
+// the only place current-cycle points get computed. This file used to also contain a flat
+// current-cycle scorer (computeFacilitySummary) and a fixed-20%-band overall quintile
+// estimator (estimateQuintile) — both were confirmed incorrect against DOH's real 2025
+// methodology (no improvement matrix, and NY doesn't rank by fixed score bands) and were
+// removed rather than fixed in place, since the replacement needed cycle-versioned rules this
+// file was never structured to hold.
+//
 // This module deliberately has no dependency on cmsAutofill.js (which does a bare
 // `import cmsData from "../data/cms_autofill.json"`) — scripts/fetch-cms-data.mjs
 // imports MEASURES from here under plain Node ESM, where a bare JSON import throws
@@ -11,6 +23,7 @@
 
 export const SECTION_MAX = { quality: 65, compliance: 15, efficiency: 10 };
 export const TOTAL_MAX = 90;
+
 
 export const MEASURES = [
   {
@@ -196,15 +209,6 @@ export function getPoints(m, val, starVal, binaryVal, cutpoints) {
   return null;
 }
 
-export function getGapToNext(m, val, q, cutpoints) {
-  if (!q || q <= 1) return null;
-  const v = parseFloat(val);
-  if (isNaN(v) || !cutpoints) return null;
-  const target = cutpoints[q - 2];
-  if (target === undefined) return null;
-  return { gap: Math.abs(m.higherIsBetter ? target - v : v - target), target };
-}
-
 // Sum an actuals object (measureId -> {value, quintile, points}) to a total score out of 90.
 export function totalFromActuals(actuals) {
   return MEASURES.reduce((acc, m) => acc + (actuals[m.id]?.points ?? 0), 0);
@@ -213,107 +217,4 @@ export function totalFromActuals(actuals) {
 export function sectionScore(actuals, section) {
   return MEASURES.filter(m => m.section === section)
     .reduce((acc, m) => acc + (actuals[m.id]?.points ?? 0), 0);
-}
-
-export function estimateQuintile(totalPts, max = TOTAL_MAX) {
-  const pct = (totalPts / max) * 100;
-  return pct >= 80 ? 1 : pct >= 60 ? 2 : pct >= 40 ? 3 : pct >= 20 ? 4 : 5;
-}
-
-// 2025 points for a single trackable measure (returns null for PAH — see
-// computeFacilitySummary for why it's excluded from the projection rather than
-// carried forward from its last recorded value).
-export function getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals) {
-  if (m.notTrackable) return null;
-  const cutpoints = getCutpoints(dataset, m.id, facility.region);
-  return getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
-}
-
-// Computes a facility's 2023 actual vs. entered full-year projection summary,
-// used by both the Portfolio table and the per-facility Dashboard tab.
-//
-// PAH (and any other notTrackable measure) is excluded from the 2025 projection
-// entirely rather than carrying forward its last recorded score — a stale number
-// isn't a real projection of 2025 performance, and silently folding it in would
-// misrepresent both the projected total and the improvement delta. So score2025
-// is out of TRACKABLE_MAX (80, not 90), and ptsDelta compares like-for-like by
-// also stripping PAH out of the 2023 side.
-//
-// `getLiveCutpoints` is the caller's cmsAutofill.js lookup (see module note
-// above). The live track scores the SAME entered `vals` as the DOH track,
-// out of the SAME TRACKABLE_MAX total, so the two are directly comparable —
-// just ranked against the live NY-wide cut points instead of the frozen DOH
-// ones wherever a live split actually exists. For measures with no live
-// equivalent (threshold/star/binary scoring, which aren't quintile splits at
-// all, or a quintile measure with no CMS data to derive a split from — e.g.
-// staff flu vaccination), the DOH-computed points carry over into the live
-// total unchanged: there's no "live version" of a pass/fail threshold or a
-// five-star rating, so both tracks agree on those measures by construction.
-export function computeFacilitySummary(dataset, facility, inputs, getLiveCutpoints) {
-  // facility.totalScore is DOH's published score: (points earned / max
-  // attainable) x 100, NOT a raw point sum out of 90. Max attainable shrinks
-  // below 90 when DOH excludes a measure for small sample size (marked "SS"
-  // in actuals) — so this is a normalized 0-100 figure, always comparable
-  // across facilities, not "points out of 90". Verified against real data:
-  // a facility with SS-excluded measures and 50 raw points out of an
-  // adjusted 75-point max published totalScore 66.7 (=50/75x100), not 50/90.
-  const score2023 = facility.totalScore ?? totalFromActuals(facility.actuals);
-  const quintile2023 = facility.overallQuintile ?? null;
-  // ptsDelta needs to compare like-for-like raw point totals against
-  // score2025 (also raw points), so it's built from totalFromActuals (raw
-  // points), not from the normalized score2023 above — subtracting PAH's
-  // raw points from a 0-100 normalized figure would mix units.
-  const score2023Trackable = totalFromActuals(facility.actuals) - MEASURES
-    .filter(m => m.notTrackable)
-    .reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0);
-
-  const vals = inputs?.vals ?? {};
-  const starVals = inputs?.starVals ?? {};
-  const binaryVals = inputs?.binaryVals ?? {};
-
-  let score2025 = 0, entered = 0;
-  let score2025Live = 0;
-  for (const m of TRACKABLE_MEASURES) {
-    const cutpoints = getCutpoints(dataset, m.id, facility.region);
-    const p = getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], cutpoints);
-    if (p !== null) { score2025 += p; entered++; }
-
-    const liveCutpoints = (m.scoring === "quintile" && getLiveCutpoints) ? getLiveCutpoints(m.id) : null;
-    if (liveCutpoints) {
-      const pLive = getPoints(m, vals[m.id], null, null, liveCutpoints);
-      if (pLive !== null) score2025Live += pLive;
-    } else if (p !== null) {
-      score2025Live += p;
-    }
-  }
-  const liveMax = TRACKABLE_MAX;
-
-  const hasEntries = entered > 0;
-  const round1 = n => Math.round(n * 10) / 10;
-  return {
-    score2023,
-    // Same raw-point basis as score2025 (TRACKABLE_MAX, PAH excluded) — use
-    // this, not score2023, when displaying a 2023 figure next to score2025.
-    // score2023 is DOH's normalized 0-100 score across all measures
-    // including PAH; it isn't on the same scale and can't be compared to
-    // score2025 directly.
-    score2023Trackable,
-    quintile2023,
-    // Facilities with a J/K/L (immediate jeopardy) health inspection
-    // deficiency are excluded from NHQI quintile ranking entirely per DOH's
-    // methodology — surfaced so the UI can flag that this facility's
-    // quintile isn't part of the official ranked pool.
-    jklDeficiency: !!facility.jklDeficiency,
-    score2025: hasEntries ? score2025 : null,
-    entered,
-    quintile2027: hasEntries ? estimateQuintile(score2025, TRACKABLE_MAX) : null,
-    ptsDelta: hasEntries ? round1(score2025 - score2023Trackable) : null,
-    // "Live" track: same entered values and same total (TRACKABLE_MAX), just
-    // ranked against the live NY-wide quintile benchmark instead of the frozen
-    // DOH cut points wherever a live split exists — a directional second
-    // opinion, not a DOH-certified figure.
-    score2025Live: hasEntries ? score2025Live : null,
-    liveMax,
-    quintile2027Live: hasEntries ? estimateQuintile(score2025Live, liveMax) : null,
-  };
 }

@@ -1,15 +1,14 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { loadActiveDataset, findFacilityById } from "../lib/dataset.js";
-import { getInputs, saveInputs, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
-import { MEASURES, TRACKABLE_MEASURES, TRACKABLE_MAX, SECTION_MAX, getCutpoints, getQuintile, getPoints, computeFacilitySummary, getDisplayed2025Points } from "../lib/scoring.js";
-import { qColor, ptsColor } from "../lib/colors.js";
+import { getFacilityInputs, saveManualFieldValue, saveCmsAutofillField, savePahScenario, resetInputs, renameFacility, getPortfolio } from "../lib/storage.js";
+import { MEASURES_2025, TRACKABLE_MEASURES_2025, SECTION_MAX_2025, CYCLE } from "../lib/nhqi/measures/2025.js";
+import { scoreFacility, buildPriorYearQuintilesFrom2023Actuals } from "../lib/nhqi/scorer.js";
+import { official2023Benchmark, liveCmsBenchmark } from "../lib/nhqi/benchmarks.js";
 import { getAutofillValue, cmsAutofillMeta, getLiveCutpoints } from "../lib/cmsAutofill.js";
 import MeasureRow from "../components/MeasureRow.jsx";
 import PriorityList from "../components/PriorityList.jsx";
 import { downloadFacilityPdf } from "../lib/pdfExport.jsx";
-
-const LIVE_COLOR = "#6d28d9";
 
 const SECTIONS = [
   { key: "quality", label: "Quality Measures" },
@@ -17,23 +16,38 @@ const SECTIONS = [
   { key: "efficiency", label: "Efficiency — PAH" },
 ];
 
-// Builds the initial vals/starVals/binaryVals for a facility, pre-filling any
-// trackable field the user hasn't entered yet with a CMS Care Compare default
-// (see src/lib/cmsAutofill.js). Fields still at their CMS default are tracked
-// in autoSet so the UI can mark them with an asterisk — editing a field removes
-// it from that set, since it's now the user's own number.
-function buildPrefill(facility, facilityId) {
-  const stored = getInputs(facilityId);
-  const storedVals = stored.vals || {};
-  const vals = { ...storedVals };
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null;
+}
+
+// Loads this facility's stored inputs, unwraps FieldRecords to plain editable values (plus
+// their real recorded verification, so a migrated legacy entry reads as stale, not current),
+// and pre-fills any trackable field that has never been stored with a CMS Care Compare
+// default — durably persisted right away as a cms_autofill record (not silently treated as a
+// manual entry by a later bulk save), so provenance survives reload even before the user
+// edits it.
+function loadAndPrefill(facility, facilityId) {
+  const stored = getFacilityInputs(facilityId);
+  const vals = {};
+  const verifications = { vals: {}, starVals: {}, binaryVals: {} };
   const autoSet = new Set();
-  for (const m of TRACKABLE_MEASURES) {
-    const hasStored = storedVals[m.id] !== undefined && storedVals[m.id] !== "";
-    if (hasStored) continue;
+  for (const [id, rec] of Object.entries(stored.vals)) { vals[id] = rec.value; verifications.vals[id] = rec.verification; }
+  for (const m of TRACKABLE_MEASURES_2025) {
+    if (m.scoringRule !== "quintile" && m.scoringRule !== "threshold") continue;
+    if (vals[m.id] !== undefined) continue;
     const auto = getAutofillValue(m.id, facility.medicareNumber);
-    if (auto !== null) { vals[m.id] = String(auto); autoSet.add(m.id); }
+    if (auto === null) continue;
+    const period = cmsAutofillMeta.generatedAt ? `CMS pull ${fmtDate(cmsAutofillMeta.generatedAt)}` : "CMS Care Compare";
+    saveCmsAutofillField(facilityId, "vals", m.id, String(auto), { period, fetchedAt: cmsAutofillMeta.generatedAt });
+    vals[m.id] = String(auto);
+    verifications.vals[m.id] = "cms_autofill";
+    autoSet.add(m.id);
   }
-  return { vals, starVals: stored.starVals || {}, binaryVals: stored.binaryVals || {}, autoSet };
+  const starVals = {};
+  for (const [id, rec] of Object.entries(stored.starVals)) { starVals[id] = rec.value; verifications.starVals[id] = rec.verification; }
+  const binaryVals = {};
+  for (const [id, rec] of Object.entries(stored.binaryVals)) { binaryVals[id] = rec.value; verifications.binaryVals[id] = rec.verification; }
+  return { vals, starVals, binaryVals, verifications, pahScenario: stored.pahScenario ?? null, autoSet };
 }
 
 export default function FacilityTracker() {
@@ -46,47 +60,22 @@ export default function FacilityTracker() {
   const [vals, setVals] = useState({});
   const [starVals, setStarVals] = useState({});
   const [binaryVals, setBinaryVals] = useState({});
+  const [verifications, setVerifications] = useState({ vals: {}, starVals: {}, binaryVals: {} });
+  const [pahScenario, setPahScenario] = useState(null);
   const [autoFilled, setAutoFilled] = useState(new Set());
-  const [saveStatus, setSaveStatus] = useState("");
+  const [benchmarkChoice, setBenchmarkChoice] = useState("2023");
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
     if (!facility) return;
-    const { vals, starVals, binaryVals, autoSet } = buildPrefill(facility, facilityId);
-    setVals(vals);
-    setStarVals(starVals);
-    setBinaryVals(binaryVals);
-    setAutoFilled(autoSet);
+    const { vals, starVals, binaryVals, verifications, pahScenario, autoSet } = loadAndPrefill(facility, facilityId);
+    setVals(vals); setStarVals(starVals); setBinaryVals(binaryVals); setVerifications(verifications); setPahScenario(pahScenario); setAutoFilled(autoSet);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facilityId]);
 
-  // Keep a ref to the latest values so the unmount-flush effect below (which
-  // must have empty deps to only fire on true unmount) can still read them.
-  const latestRef = useRef({ vals, starVals, binaryVals, facilityId });
-  latestRef.current = { vals, starVals, binaryVals, facilityId };
-
-  useEffect(() => {
-    setSaveStatus("saving");
-    const t = setTimeout(() => {
-      saveInputs(facilityId, { vals, starVals, binaryVals });
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus(""), 1500);
-    }, 500);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vals, starVals, binaryVals, facilityId]);
-
-  // Flush any pending debounced save immediately when navigating away —
-  // otherwise a route change within the 500ms debounce window silently
-  // discards the last edit (the cleanup above only cancels the timer).
-  useEffect(() => {
-    return () => {
-      const latest = latestRef.current;
-      saveInputs(latest.facilityId, { vals: latest.vals, starVals: latest.starVals, binaryVals: latest.binaryVals });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Must run unconditionally (before any early return) -- Rules of Hooks.
+  const priorYearQuintiles = useMemo(() => (facility ? buildPriorYearQuintilesFrom2023Actuals(facility) : {}), [facility]);
 
   if (!facility) {
     return (
@@ -99,15 +88,30 @@ export default function FacilityTracker() {
 
   const setVal = (id, v) => {
     setVals(p => ({ ...p, [id]: v }));
+    setVerifications(p => ({ ...p, vals: { ...p.vals, [id]: "manual" } }));
     setAutoFilled(p => (p.has(id) ? new Set([...p].filter(x => x !== id)) : p));
+    saveManualFieldValue(facilityId, "vals", id, v);
   };
-  const setStar = (id, v) => setStarVals(p => ({ ...p, [id]: v }));
-  const setBinary = (id, v) => setBinaryVals(p => ({ ...p, [id]: v }));
+  const setStar = (id, v) => {
+    setStarVals(p => ({ ...p, [id]: v }));
+    setVerifications(p => ({ ...p, starVals: { ...p.starVals, [id]: "manual" } }));
+    saveManualFieldValue(facilityId, "starVals", id, v);
+  };
+  const setBinary = (id, v) => {
+    setBinaryVals(p => ({ ...p, [id]: v }));
+    setVerifications(p => ({ ...p, binaryVals: { ...p.binaryVals, [id]: "manual" } }));
+    saveManualFieldValue(facilityId, "binaryVals", id, v);
+  };
+  const setPah = scenario => { setPahScenario(scenario); savePahScenario(facilityId, scenario); };
 
   const displayName = portfolioEntry?.displayName || facility.name;
-  const summary = computeFacilitySummary(dataset, facility, { vals, starVals, binaryVals }, getLiveCutpoints);
-  const qc = summary.quintile2027 !== null ? qColor(summary.quintile2027) : "#94a3b8";
-  const qcLive = summary.quintile2027Live !== null ? qColor(summary.quintile2027Live) : "#94a3b8";
+
+  const benchmark = benchmarkChoice === "2023"
+    ? official2023Benchmark(dataset, facility)
+    : liveCmsBenchmark(getLiveCutpoints, cmsAutofillMeta.generatedAt);
+  const scored = scoreFacility({ facility, inputs: { vals, starVals, binaryVals, verifications, pahScenario }, benchmark, priorYearQuintiles });
+
+  const missingFields = scored.perMeasure.filter(r => r.observation.state === "missing_input").map(r => r.measure.displayName);
 
   function handleRename() {
     if (nameDraft.trim()) renameFacility(facilityId, nameDraft.trim());
@@ -115,10 +119,10 @@ export default function FacilityTracker() {
   }
 
   function handleReset() {
-    if (!window.confirm("Clear all entered current data for this facility?")) return;
+    if (!window.confirm("Clear all entered current-cycle data for this facility? CMS pre-filled values will be re-applied; your manual entries will not.")) return;
     resetInputs(facilityId);
-    const { vals, starVals, binaryVals, autoSet } = buildPrefill(facility, facilityId);
-    setVals(vals); setStarVals(starVals); setBinaryVals(binaryVals); setAutoFilled(autoSet);
+    const { vals, starVals, binaryVals, pahScenario, autoSet } = loadAndPrefill(facility, facilityId);
+    setVals(vals); setStarVals(starVals); setBinaryVals(binaryVals); setPahScenario(pahScenario); setAutoFilled(autoSet);
   }
 
   const TAB = active => ({
@@ -151,59 +155,19 @@ export default function FacilityTracker() {
               </div>
             )}
             <div style={{ fontSize: 11, color: "#94a3b8" }}>
-              {dataset.year} Actual vs. Current Full-Year · {facility.city}, {facility.county}
+              {facility.city}, {facility.county} · NHQI cycle {CYCLE}
             </div>
-            {saveStatus === "saving" && <div style={{ fontSize: 10, color: "#d97706", marginTop: 2 }}>● Saving…</div>}
-            {saveStatus === "saved" && <div style={{ fontSize: 10, color: "#16a34a", marginTop: 2 }}>✓ Saved</div>}
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>Saved on this device</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>{dataset.year} Score</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#475569", fontFamily: "monospace" }}>{summary.score2023}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/100</span></div>
-            {summary.jklDeficiency && (
-              <div style={{ fontSize: 9, color: "#b45309", fontWeight: 600 }}>⚠ JKL — excluded from ranking</div>
-            )}
-          </div>
-          {summary.score2025 !== null && (
-            <>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: "#0d9488" }}>Current Score (excl. PAH)</div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                  <div>
-                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", fontFamily: "monospace" }}>{summary.score2025}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{TRACKABLE_MAX}</span></div>
-                  </div>
-                  {summary.score2025Live !== null && (
-                    <div>
-                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>{summary.score2025Live}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{summary.liveMax}</span></div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize: 10, marginTop: 2, color: "#94a3b8" }}>
-                  vs {dataset.year} trackable: {summary.score2023Trackable}/{TRACKABLE_MAX}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: "#0d9488" }}>Est. Quintile</div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                  <div>
-                    <div style={{ fontSize: 8, color: "#94a3b8" }}>DOH</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: qc, fontFamily: "monospace" }}>Q{summary.quintile2027}</div>
-                  </div>
-                  {summary.quintile2027Live !== null && (
-                    <div>
-                      <div style={{ fontSize: 8, color: "#94a3b8" }}>Live</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: qcLive, fontFamily: "monospace" }}>Q{summary.quintile2027Live}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <select value={benchmarkChoice} onChange={e => setBenchmarkChoice(e.target.value)}
+            style={{ fontSize: 12, border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 8px", color: "#0f172a", background: "#fff" }}>
+            <option value="2023">Modeled against 2023 NY DOH cutpoints</option>
+            <option value="live">Latest public NY benchmark (CMS)</option>
+          </select>
           <button
-            onClick={() => downloadFacilityPdf({ dataset, facility, displayName, vals, starVals, binaryVals, summary })}
+            onClick={() => downloadFacilityPdf({ dataset, facility, displayName, vals, starVals, binaryVals, verifications, pahScenario, benchmarkChoice, priorYearQuintiles })}
             style={{ background: "#0d9488", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}
           >
             ⬇ Export PDF
@@ -211,35 +175,46 @@ export default function FacilityTracker() {
         </div>
       </div>
 
+      {scored.eligibilityBlocked && (
+        <div style={{ background: "#fef3c7", borderBottom: "1px solid #fde68a", padding: "8px 22px", fontSize: 12, color: "#92400e" }}>
+          ⚠ {scored.eligibilityReason}
+        </div>
+      )}
+
+      <div style={{ background: "#fafaf9", borderBottom: "1px solid #e2e8f0", padding: "8px 22px", fontSize: 12, color: "#475569", display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <span>Coverage: <strong>{scored.coverage.measuresKnown}/{scored.coverage.measuresTotal}</strong> measures resolved</span>
+        <span>Known points: <strong style={{ color: "#0d9488" }}>{scored.knownEarnedPoints}</strong></span>
+        <span>Unresolved: <strong style={{ color: "#b45309" }}>{scored.unresolvedMaxPoints}</strong> of {scored.fullEligibleMax} max</span>
+        <span>Benchmark: <strong>{scored.benchmark?.label}</strong>{scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""}</span>
+      </div>
+
+      {missingFields.length > 0 && (
+        <div style={{ background: "#fffbeb", borderBottom: "1px solid #fde68a", padding: "8px 22px", fontSize: 12, color: "#92400e" }}>
+          Incomplete — {missingFields.length} input{missingFields.length === 1 ? "" : "s"} missing: {missingFields.join(", ")}
+        </div>
+      )}
+
       <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", padding: "0 22px", display: "flex", gap: 2 }}>
-        <button style={TAB(tab === "dashboard")} onClick={() => setTab("dashboard")}>Dashboard</button>
-        <button style={TAB(tab === "measures")} onClick={() => setTab("measures")}>Enter Current Numbers</button>
-        <button style={TAB(tab === "priority")} onClick={() => setTab("priority")}>Est. Results</button>
+        <button style={TAB(tab === "dashboard")} onClick={() => setTab("dashboard")}>Overview</button>
+        <button style={TAB(tab === "measures")} onClick={() => setTab("measures")}>Measures</button>
+        <button style={TAB(tab === "priority")} onClick={() => setTab("priority")}>Improvement Plan</button>
       </div>
 
       <div style={{ padding: "20px 22px", maxWidth: 820, margin: "0 auto" }}>
         {tab === "dashboard" && (
-          <DashboardTab dataset={dataset} facility={facility} summary={summary} vals={vals} starVals={starVals} binaryVals={binaryVals} qc={qc} qcLive={qcLive} />
+          <DashboardTab dataset={dataset} facility={facility} scored={scored} pahScenario={pahScenario} setPah={setPah} />
         )}
         {tab === "measures" && (
           <MeasuresTab dataset={dataset} facility={facility} vals={vals} starVals={starVals} binaryVals={binaryVals} autoFilled={autoFilled}
+            scored={scored} benchmark={benchmark}
             setVal={setVal} setStar={setStar} setBinary={setBinary} onReset={handleReset} />
         )}
         {tab === "priority" && (
           <div>
             <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
-              {summary.jklDeficiency && (
-                <div style={{ color: "#b45309", fontWeight: 600, marginBottom: 4 }}>⚠ This facility had a J/K/L (immediate jeopardy) health inspection deficiency — DOH excludes it from NHQI quintile ranking. The quintile below is directional only.</div>
-              )}
-              {dataset.year} official: <strong>{summary.score2023}/100 → {summary.quintile2023 ? `Q${summary.quintile2023}` : "—"}</strong>
-              {summary.score2025 !== null && (
-                <span> &nbsp;·&nbsp; {dataset.year} trackable → Current (excl. PAH): <strong style={{ color: qc }}>{summary.score2023Trackable}/{TRACKABLE_MAX} → {summary.score2025}/{TRACKABLE_MAX} pts → est. Q{summary.quintile2027}</strong></span>
-              )}
-              {summary.quintile2027Live !== null && (
-                <span> &nbsp;·&nbsp; vs. Live cut points: <strong style={{ color: qcLive }}>{summary.score2025Live}/{summary.liveMax} pts → est. Q{summary.quintile2027Live}</strong></span>
-              )}
+              <strong>{scored.benchmark?.label}</strong>{scored.benchmark?.asOf ? ` (${scored.benchmark.asOf})` : ""} · cycle {CYCLE}. Overall quintile is not modeled this pass — see Overview.
             </div>
-            <PriorityList dataset={dataset} facility={facility} vals={vals} />
+            <PriorityList scored={scored} />
           </div>
         )}
       </div>
@@ -247,86 +222,72 @@ export default function FacilityTracker() {
   );
 }
 
-function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, qc, qcLive }) {
-  const bySection = key => MEASURES.filter(m => m.section === key);
+function DashboardTab({ dataset, facility, scored, pahScenario, setPah }) {
+  const official2023Total = facility.totalScore ?? null;
+  const official2023Quintile = facility.overallQuintile ?? null;
 
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        {[
-          {
-            key: "actual", label: `${dataset.year} Actual Score`,
-            sub: summary.jklDeficiency ? "⚠ JKL deficiency — excluded from ranking" : `Actual · drove ${dataset.year} payment`,
-            values: [{ val: `${summary.score2023}/100`, color: "#475569" }],
-          },
-          {
-            key: "current", label: "Current Score (excl. PAH)",
-            sub: summary.entered > 0 ? `${summary.entered}/${TRACKABLE_MEASURES.length} trackable measures entered` : "Enter current data",
-            values: [
-              { tag: "DOH", val: summary.score2025 !== null ? `${summary.score2025}/${TRACKABLE_MAX}` : "—", color: qc },
-              ...(summary.score2025Live !== null ? [{ tag: "Live", val: `${summary.score2025Live}/${summary.liveMax}`, color: qcLive }] : []),
-            ],
-          },
-          {
-            key: "quintile", label: "Est. Quintile",
-            sub: [
-              summary.quintile2027 !== null ? `DOH: ${summary.quintile2027 <= 3 ? "positive" : "negative"} pool` : null,
-              summary.quintile2027Live !== null ? `Live: ${summary.quintile2027Live <= 3 ? "positive" : "negative"} pool` : null,
-            ].filter(Boolean).join(" · ") || "Projected from current rates",
-            values: [
-              { tag: "DOH", val: summary.quintile2027 !== null ? `Q${summary.quintile2027}` : "—", color: qc },
-              ...(summary.quintile2027Live !== null ? [{ tag: "Live", val: `Q${summary.quintile2027Live}`, color: qcLive }] : []),
-            ],
-          },
-        ].map(c => (
-          <div key={c.key} style={{ flex: "1 1 200px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{c.label}</div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 4 }}>
-              {c.values.map((v, i) => (
-                <div key={i}>
-                  {v.tag && <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.03em" }}>{v.tag}</div>}
-                  <div style={{ fontSize: c.values.length > 1 ? 22 : 26, fontWeight: 700, color: v.color, fontFamily: "monospace", lineHeight: 1 }}>{v.val}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>{c.sub}</div>
+        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>Official {dataset.year} result</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "#475569", fontFamily: "monospace", lineHeight: 1 }}>
+            {official2023Total ?? "—"}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/100</span>
           </div>
-        ))}
+          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+            {official2023Quintile ? `Published quintile Q${official2023Quintile}` : "No published quintile on file"}
+          </div>
+        </div>
+
+        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 6 }}>Known points, cycle {CYCLE}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "#0d9488", fontFamily: "monospace", lineHeight: 1 }}>
+            {scored.knownEarnedPoints}<span style={{ fontSize: 11, color: "#cbd5e1" }}>/{scored.fullEligibleMax}</span>
+          </div>
+          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+            {scored.unresolvedMaxPoints} point{scored.unresolvedMaxPoints === 1 ? "" : "s"} unresolved · {scored.coverage.measuresKnown}/{scored.coverage.measuresTotal} measures
+          </div>
+        </div>
+
+        <div style={{ flex: "1 1 220px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>Overall quintile</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#94a3b8" }}>Not modeled</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, lineHeight: 1.4 }}>{scored.overallQuintile.reason}</div>
+        </div>
       </div>
 
+      {scored.normalizedScore && (
+        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginBottom: 14, fontSize: 13, color: "#475569" }}>
+          Normalized score (all {scored.coverage.measuresTotal} measures resolved): <strong>{scored.normalizedScore.value}</strong> ({scored.normalizedScore.basis}) — {scored.benchmark?.label}, not an official figure.
+        </div>
+      )}
+
       <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 12 }}>Score by section</div>
-        {[
-          { key: "quality", label: `Quality (${bySection("quality").length} measures)` },
-          { key: "compliance", label: `Compliance (${bySection("compliance").length} measures)` },
-          { key: "efficiency", label: "Efficiency — PAH" },
-        ].map(sec => {
-          const measures = bySection(sec.key);
-          const allNotTrackable = measures.every(m => m.notTrackable);
-          const max = SECTION_MAX[sec.key];
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 12 }}>Points by section</div>
+        {["quality", "compliance", "efficiency"].map(sec => {
+          const measures = MEASURES_2025.filter(m => m.section === sec);
+          const max = SECTION_MAX_2025[sec];
           const pts23 = measures.reduce((a, m) => a + (facility.actuals[m.id]?.points ?? 0), 0);
-          const pts25 = measures.reduce((a, m) => {
-            const p = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
-            return a + (p ?? 0);
-          }, 0);
+          const sectionRows = scored.perMeasure.filter(r => r.measure.section === sec);
+          const known = sectionRows.filter(r => r.points !== null);
+          const ptsCurrent = known.reduce((a, r) => a + r.points, 0);
           const pct23 = (pts23 / max) * 100;
-          const pct25 = (pts25 / max) * 100;
+          const pctCurrent = (ptsCurrent / max) * 100;
           return (
-            <div key={sec.key} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: "#475569" }}>{sec.label}</span>
-                <span style={{ fontFamily: "monospace" }}>
-                  <span style={{ color: "#94a3b8" }}>{dataset.year}: {pts23}/{max}</span>
-                  {allNotTrackable ? (
-                    <span style={{ color: "#d97706", marginLeft: 12, fontFamily: "inherit" }}>excluded from current projection</span>
-                  ) : (
-                    summary.entered > 0 && <span style={{ color: "#0d9488", marginLeft: 12 }}>Current: {pts25}/{max}</span>
-                  )}
+            <div key={sec} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4, fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: "#475569", textTransform: "capitalize", fontWeight: 600 }}>{sec}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 11 }}>
+                  official {pts23}/{max} · known {ptsCurrent}/{max} ({known.length}/{sectionRows.length} resolved)
                 </span>
               </div>
-              <div style={{ position: "relative", background: "#f0efed", borderRadius: 3, height: 7 }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>official {dataset.year}</div>
+              <div style={{ position: "relative", background: "#f0efed", borderRadius: 3, height: 6, marginBottom: 4 }}>
                 <div style={{ position: "absolute", left: 0, top: 0, width: `${pct23}%`, height: "100%", background: "#cbd5e1", borderRadius: 3 }} />
-                {!allNotTrackable && summary.entered > 0 && <div style={{ position: "absolute", left: 0, top: 0, width: `${pct25}%`, height: "100%", background: "#0d9488", borderRadius: 3, opacity: 0.85 }} />}
+              </div>
+              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>known, cycle {CYCLE}</div>
+              <div style={{ position: "relative", background: "#f0efed", borderRadius: 3, height: 6 }}>
+                <div style={{ position: "absolute", left: 0, top: 0, width: `${pctCurrent}%`, height: "100%", background: "#0d9488", borderRadius: 3 }} />
               </div>
             </div>
           );
@@ -334,69 +295,44 @@ function DashboardTab({ dataset, facility, summary, vals, starVals, binaryVals, 
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "16px 18px" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 10 }}>All measures at a glance</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "2px 16px" }}>
-          {MEASURES.map(m => {
-            const cutpoints = getCutpoints(dataset, m.id, facility.region);
-            const q25 = (!m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah")) ? getQuintile(m, vals[m.id], cutpoints) : null;
-            const pts25 = getDisplayed2025Points(dataset, facility, m, vals, starVals, binaryVals);
-            const a = facility.actuals[m.id] || { quintile: null, points: 0 };
-            const aQ = typeof a.quintile === "string" ? parseInt(a.quintile) : a.quintile;
-            const moved = typeof aQ === "number" && !isNaN(aQ) && q25 !== null && q25 !== aQ;
-            const liveCutpoints = (!m.notTrackable && m.scoring === "quintile") ? getLiveCutpoints(m.id) : null;
-            const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
-            const ptsLive = liveCutpoints ? getPoints(m, vals[m.id], starVals[m.id], binaryVals[m.id], liveCutpoints) : null;
-            return (
-              <div key={m.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0efed" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: pts25 !== null ? ptsColor(pts25, m.maxPts) : "#e2e8f0", flexShrink: 0 }} />
-                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: pts25 !== null ? "#0f172a" : "#cbd5e1" }}>{m.short}</div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12 }}>
-                  <span style={{ fontSize: 9, color: "#94a3b8", minWidth: 26 }}>DOH</span>
-                  <div style={{ flex: 1, fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
-                    {typeof aQ === "number" && !isNaN(aQ) ? <span style={{ color: qColor(aQ) }}>Q{aQ}</span> : <span>—</span>}
-                    {q25 && <span style={{ color: moved ? (q25 < aQ ? "#16a34a" : "#dc2626") : "#94a3b8" }}> → Q{q25}</span>}
-                  </div>
-                  <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: "#94a3b8" }}>
-                    <span>{a.points ?? 0}</span>
-                    {m.notTrackable ? <span style={{ color: "#d97706" }}> n/a</span> : pts25 !== null && <span style={{ color: "#0d9488" }}> → {pts25}</span>}
-                  </div>
-                </div>
-
-                {qLive !== null && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12 }}>
-                    <span style={{ fontSize: 9, color: LIVE_COLOR, minWidth: 26 }}>Live</span>
-                    <div style={{ flex: 1, fontSize: 11, fontFamily: "monospace", color: qColor(qLive) }}>Q{qLive}</div>
-                    <div style={{ fontSize: 11, fontFamily: "monospace", minWidth: 50, textAlign: "right", color: LIVE_COLOR }}>
-                      {ptsLive}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>Potentially Avoidable Hospitalizations (PAH)</div>
+        <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10 }}>
+          Official {dataset.year}: {facility.actuals?.pah?.value ?? "—"} {facility.actuals?.pah ? "/10k days" : ""} · {facility.actuals?.pah?.points ?? "—"}/10 pts.
+          Not self-trackable — requires DOH's quarterly MDS→SPARCS match.
+        </div>
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 6 }}>Scenario for cycle {CYCLE} planning:</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[null, "official", 0, 2, 6, 8, 10].map(opt => (
+            <button key={String(opt)} onClick={() => setPah(opt)}
+              style={{
+                fontSize: 11, padding: "5px 10px", borderRadius: 6, cursor: "pointer",
+                border: `1px solid ${pahScenario === opt ? "#0d9488" : "#e2e8f0"}`,
+                background: pahScenario === opt ? "#0d9488" : "#fff",
+                color: pahScenario === opt ? "#fff" : "#475569",
+              }}>
+              {opt === null ? "Unresolved" : opt === "official" ? `Use official ${dataset.year}` : `${opt} pts`}
+            </button>
+          ))}
         </div>
       </div>
 
       <div style={{ marginTop: 12, padding: "10px 14px", background: "#fafaf9", border: "1px solid #f0efed", borderRadius: 8, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-        {dataset.year} actuals from NY DOH NHQI dataset for {facility.name}. Current values are internal tracking numbers. Cut points regionally adjusted where applicable ({facility.region}). PAH can't be self-tracked (requires DOH's MDS→SPARCS match), so the current score above is out of {TRACKABLE_MAX} points, excluding it entirely rather than estimating it. "Trackable" figures exclude PAH and share that same {TRACKABLE_MAX}-point basis as Current Score, so they compare directly. DOH's official {dataset.year} score (out of 100) covers every measure including PAH on a normalized basis — it isn't on the same scale as Current Score and shouldn't be subtracted from it directly. The "Live" quintile ranks your same entered numbers against a live NY-wide benchmark instead of the frozen {dataset.year} DOH cut points — a directional second opinion, not a DOH-certified figure. Est. results are directional, not guaranteed.
+        Official {dataset.year} results are NY DOH's published NHQI figures for {facility.name}, from {dataset.source}. Known/unresolved points above are modeled against cycle {CYCLE} rules (attainment + improvement matrix where applicable) and the selected benchmark — not an official DOH-certified figure. An overall quintile is not modeled this pass: NY's statewide peer cohort and tie-break method aren't sourced in this environment. Independent planning tool. Not affiliated with NY DOH.
       </div>
     </div>
   );
 }
 
-function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled, setVal, setStar, setBinary, onReset }) {
-  const bySection = key => MEASURES.filter(m => m.section === key);
-  const refreshedDate = cmsAutofillMeta.generatedAt
-    ? new Date(cmsAutofillMeta.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-    : null;
+function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled, scored, benchmark, setVal, setStar, setBinary, onReset }) {
+  const bySection = key => MEASURES_2025.filter(m => m.section === key);
+  const refreshedDate = fmtDate(cmsAutofillMeta.generatedAt);
+  const byId = Object.fromEntries(scored.perMeasure.map(r => [r.measure.id, r]));
+
   return (
     <div>
       <div style={{ background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#115e59" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span>Enter this facility's current full-year numbers to project its NHQI payment against both the frozen {dataset.year} DOH cut points and a live NY-wide benchmark.</span>
+          <span>Enter this facility's current-cycle numbers. Benchmark: {scored.benchmark?.label}.</span>
           <button onClick={onReset} style={{ background: "#fff", border: "1px solid #99f6e4", borderRadius: 6, color: "#0d9488", fontSize: 11, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
             Reset
           </button>
@@ -405,30 +341,21 @@ function MeasuresTab({ dataset, facility, vals, starVals, binaryVals, autoFilled
 
       {autoFilled.size > 0 && (
         <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 12 }}>
-          * = pre-filled from CMS Care Compare (data.cms.gov), not NY DOH's regionally-adjusted figures — verify against your own records and edit freely to override.
+          * = pre-filled from CMS Care Compare (data.cms.gov), not NY DOH's figures — verify and edit to override.
           {refreshedDate && ` Last CMS pull: ${refreshedDate}.`}
-        </div>
-      )}
-
-      {MEASURES.some(m => m.pointsApproximate) && (
-        <div style={{ fontSize: 11, color: "#b45309", marginBottom: 12 }}>
-          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table — treat current points as directional.
         </div>
       )}
 
       {SECTIONS.map(sec => (
         <div key={sec.key}>
           <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, margin: "18px 0 10px" }}>
-            {sec.label} — {SECTION_MAX[sec.key]} pts max
+            {sec.label} — {SECTION_MAX_2025[sec.key]} pts max
           </div>
-          {bySection(sec.key).map(m => {
-            const cutpoints = getCutpoints(dataset, m.id, facility.region);
-            return (
-              <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} cutpoints={cutpoints} year={dataset.year}
-                val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""} isAutofilled={autoFilled.has(m.id)}
-                onValChange={v => setVal(m.id, v)} onStarChange={v => setStar(m.id, v)} onBinaryChange={v => setBinary(m.id, v)} />
-            );
-          })}
+          {bySection(sec.key).map(m => (
+            <MeasureRow key={m.id} m={m} actual={facility.actuals[m.id]} scored={byId[m.id]} benchmark={benchmark} year={dataset.year}
+              val={vals[m.id] ?? ""} starVal={starVals[m.id] ?? ""} binaryVal={binaryVals[m.id] ?? ""} isAutofilled={autoFilled.has(m.id)}
+              onValChange={v => setVal(m.id, v)} onStarChange={v => setStar(m.id, v)} onBinaryChange={v => setBinary(m.id, v)} />
+          ))}
         </div>
       ))}
     </div>

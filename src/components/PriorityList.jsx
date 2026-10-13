@@ -1,108 +1,79 @@
-import { MEASURES, getQuintile, getGapToNext, getCutpoints } from "../lib/scoring.js";
 import { qColor } from "../lib/colors.js";
-import { getCensus, getLiveCutpoints } from "../lib/cmsAutofill.js";
-import { getActionPlan } from "../lib/actionPlan.js";
+import { getNextTierGain } from "../lib/nhqi/scorer.js";
 
-const QUINTILE_POINTS = { quintile: [5, 3, 1, 0, 0], quintile_pah: [10, 8, 6, 2, 0] };
 const LIVE_COLOR = "#6d28d9";
 
-export default function PriorityList({ dataset, facility, vals }) {
-  const census = getCensus(facility.medicareNumber);
-  const items = MEASURES
-    .filter(m => !m.notTrackable && (m.scoring === "quintile" || m.scoring === "quintile_pah"))
-    .map(m => {
-      const cutpoints = getCutpoints(dataset, m.id, facility.region);
-      const q = getQuintile(m, vals[m.id], cutpoints);
-      const gapInfo = q && q > 1 ? getGapToNext(m, vals[m.id], q, cutpoints) : null;
-      const table = QUINTILE_POINTS[m.scoring];
-      const ptGain = q ? table[q - 2] - table[q - 1] : 0;
-      const actionPlan = getActionPlan(m, gapInfo, census);
+// Consumes scorer.js's output directly — no independent point math here. Two kinds of rows:
+// real positive point gains (ranked by size), and missing-evidence tasks (measures where the
+// input itself is unresolved, so there's nothing to score yet) — never disguised as the same
+// thing, and never showing a 0-point "opportunity" dressed up as one.
+export default function PriorityList({ scored }) {
+  const opportunities = scored.perMeasure
+    .filter(r => (r.measure.scoringRule === "quintile" || r.measure.scoringRule === "quintile_pah") && r.currentQuintile && r.currentQuintile > 1)
+    .map(r => ({ row: r, gain: getNextTierGain(r) }))
+    .filter(x => x.gain !== null && x.gain > 0)
+    .sort((a, b) => b.gain - a.gain);
 
-      // Live cut-point target — ranks the same entered value against the live
-      // NY-wide benchmark instead of DOH's frozen cut points. Only exists for
-      // quintile-scored measures with a live split available (see hasLive
-      // gating throughout the rest of the app).
-      const liveCutpoints = m.scoring === "quintile" ? getLiveCutpoints(m.id) : null;
-      const qLive = liveCutpoints ? getQuintile(m, vals[m.id], liveCutpoints) : null;
-      const gapInfoLive = liveCutpoints && qLive && qLive > 1 ? getGapToNext(m, vals[m.id], qLive, liveCutpoints) : null;
-      const actionPlanLive = getActionPlan(m, gapInfoLive, census);
-      const ptGainLive = qLive && qLive > 1 ? table[qLive - 2] - table[qLive - 1] : 0;
+  const missingEvidence = scored.perMeasure.filter(r => r.observation.state === "missing_input" || r.observation.state === "invalid_input");
 
-      return { m, q, gapInfo, ptGain, actionPlan, qLive, gapInfoLive, actionPlanLive, ptGainLive };
-    })
-    .filter(x => x.q && x.q > 1)
-    .sort((a, b) => b.ptGain !== a.ptGain ? b.ptGain - a.ptGain : (a.gapInfo?.gap ?? 999) - (b.gapInfo?.gap ?? 999));
-
-  if (items.length === 0) return (
-    <div style={{ color: "#94a3b8", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
-      Enter this facility's current full-year numbers in "Enter Current Numbers" to generate its improvement plan.
-    </div>
-  );
+  if (opportunities.length === 0 && missingEvidence.length === 0) {
+    return (
+      <div style={{ color: "#94a3b8", fontSize: 13, padding: "30px 0", textAlign: "center" }}>
+        No real positive point gains identified from the current entries, and no missing inputs. Everything resolved is at its best tier for the selected benchmark.
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12 }}>
-        Ranked by remaining point opportunity
-      </div>
-      {items.some(x => x.m.pointsApproximate) && (
-        <div style={{ fontSize: 11, color: "#b45309", marginBottom: 10 }}>
-          ⚠ = DOH's real points for this measure sometimes differ ±1 from the standard quintile table — treat this projection as directional.
-        </div>
-      )}
-      {items.some(x => x.actionPlan) && (
-        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
-          → = a rough headcount plan based on this facility's average daily census from CMS — an estimate, since NHQI measures track long-stay residents specifically, not the full census.
-        </div>
-      )}
-      {items.map((x, i) => (
-        <div key={x.m.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: "#cbd5e1", fontFamily: "monospace", minWidth: 28 }}>#{i + 1}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 600, marginBottom: 4 }}>{x.m.short}{x.m.pointsApproximate ? " ⚠" : ""}</div>
-
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12, marginBottom: 2 }}>
-              <span style={{ fontSize: 9, color: "#94a3b8", minWidth: 26 }}>DOH:</span>
-              <span style={{ color: qColor(x.q), fontWeight: 600 }}>Q{x.q} → Q{x.q - 1}</span>
-              <span style={{ color: "#d97706" }}>
-                {x.m.higherIsBetter ? "↑" : "↓"} need {x.gapInfo ? `${x.gapInfo.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} (target ${x.gapInfo.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`})` : "—"}
-                {x.actionPlan ? ` · ${x.actionPlan}` : ""}
-              </span>
-            </div>
-
-            {x.qLive !== null && (
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
-                <span style={{ fontSize: 9, color: LIVE_COLOR, minWidth: 26 }}>Live:</span>
-                {x.qLive > 1 ? (
-                  <>
-                    <span style={{ color: qColor(x.qLive), fontWeight: 600 }}>Q{x.qLive} → Q{x.qLive - 1}</span>
-                    <span style={{ color: LIVE_COLOR }}>
-                      {x.m.higherIsBetter ? "↑" : "↓"} need {x.gapInfoLive ? `${x.gapInfoLive.gap.toFixed(1)}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`} (target ${x.gapInfoLive.target}${x.m.unit === "%" ? "%" : ` ${x.m.unit}`})` : "—"}
-                      {x.actionPlanLive ? ` · ${x.actionPlanLive}` : ""}
-                    </span>
-                  </>
-                ) : (
-                  <span style={{ color: qColor(x.qLive), fontWeight: 600 }}>Q{x.qLive} — already top quintile</span>
-                )}
+      {opportunities.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12 }}>
+            Ranked by attainable point gain — only moves that actually earn points under the applicable 2025 rule for that measure.
+          </div>
+          {opportunities.map((x, i) => {
+            const { row } = x;
+            const m = row.measure;
+            const label = m.higherIsBetter ? "↑" : "↓";
+            return (
+              <div key={m.id} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#cbd5e1", fontFamily: "monospace", minWidth: 28 }}>#{i + 1}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 600, marginBottom: 4 }}>{m.displayName}</div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontSize: 12 }}>
+                    <span style={{ color: qColor(row.currentQuintile), fontWeight: 600 }}>Q{row.currentQuintile} → Q{row.currentQuintile - 1}</span>
+                    {row.gapInfo && (
+                      <span style={{ color: "#d97706" }}>
+                        {label} {row.gapInfo.gap.toFixed(1)}{m.unit === "%" ? "%" : ` ${m.unit}`} needed · target {row.gapInfo.displayTarget}{m.unit === "%" ? "%" : ` ${m.unit}`}
+                      </span>
+                    )}
+                    {row.pointsBasis === "attainment_plus_improvement" && (
+                      <span style={{ fontSize: 10, color: LIVE_COLOR }}>(improvement-eligible, prior Q{row.priorQuintile})</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.gain}</div>
+                  <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
+                </div>
               </div>
-            )}
+            );
+          })}
+        </>
+      )}
+
+      {missingEvidence.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, color: "#64748b", margin: "18px 0 12px" }}>
+            Missing evidence — entering these would resolve a currently-unresolved measure, not a guaranteed gain:
           </div>
-          <div style={{ textAlign: "center", background: "#f0fdf4", borderRadius: 8, padding: "6px 14px", minWidth: 58 }}>
-            {x.qLive !== null && x.ptGainLive !== x.ptGain ? (
-              <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
-                <div style={{ fontSize: 9, color: "#16a34a" }}>pts (DOH)</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: LIVE_COLOR, fontFamily: "monospace", marginTop: 4 }}>+{x.ptGainLive}</div>
-                <div style={{ fontSize: 9, color: LIVE_COLOR }}>pts (Live)</div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#16a34a", fontFamily: "monospace" }}>+{x.ptGain}</div>
-                <div style={{ fontSize: 9, color: "#16a34a" }}>points</div>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
+          {missingEvidence.map(r => (
+            <div key={r.measure.id} style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", marginBottom: 6, fontSize: 12, color: "#92400e" }}>
+              <strong>{r.measure.displayName}</strong> — {r.observation.state === "invalid_input" ? "entered value is invalid" : "not entered"}. Up to {r.measure.maxPoints} pts at stake, period: {r.measure.measurementPeriod?.label ?? "unspecified"}.
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

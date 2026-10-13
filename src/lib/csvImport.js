@@ -69,34 +69,40 @@ export function parseNhqiCsv(text) {
   if (rows.length < 2) throw new Error("CSV appears to be empty");
   const header = rows[0];
   const idx = name => header.indexOf(name);
-  const col = {
-    year: idx("Measurement Year"),
-    facilityName: idx("Facility Name"),
-    facilityId: idx("Facility ID"),
-    opcert: idx("Facility OPCERT"),
-    medicare: idx("Facility Medicare Number"),
-    measureId: idx("Measure ID Number"),
-    q1: idx("First Quintile"), q2: idx("Second Quintile"), q3: idx("Third Quintile"),
-    q4: idx("Fourth Quintile"), q5: idx("Fifth Quintile"),
-    numValue: idx("Numeric Value"), charValue: idx("Character Value"),
-    quintile: idx("Quintile"), points: idx("Points"),
-    city: idx("City"), county: idx("County"), region: idx("Region"), location: idx("Location"),
+  const COLUMN_NAMES = {
+    year: "Measurement Year", facilityName: "Facility Name", facilityId: "Facility ID",
+    opcert: "Facility OPCERT", medicare: "Facility Medicare Number", measureId: "Measure ID Number",
+    q1: "First Quintile", q2: "Second Quintile", q3: "Third Quintile", q4: "Fourth Quintile", q5: "Fifth Quintile",
+    numValue: "Numeric Value", charValue: "Character Value", quintile: "Quintile", points: "Points",
+    city: "City", county: "County", region: "Region", location: "Location",
   };
+  const col = Object.fromEntries(Object.entries(COLUMN_NAMES).map(([key, name]) => [key, idx(name)]));
   const required = ["year", "facilityName", "facilityId", "measureId", "points"];
-  for (const key of required) {
-    if (col[key] === -1) throw new Error(`CSV is missing expected column for "${key}"`);
+  const missingColumns = required.filter(key => col[key] === -1);
+  if (missingColumns.length > 0) {
+    throw new Error(`CSV is missing expected column${missingColumns.length > 1 ? "s" : ""}: ${missingColumns.map(k => `"${COLUMN_NAMES[k]}"`).join(", ")}`);
   }
 
   const facilities = {};
   const measureCutpoints = {};
   let year = null;
+  const yearsSeen = new Set();
+  const unmappedMeasureIds = new Map(); // measure id -> row count, seen in the CSV but not in MEASURE_MAP/META_MAP
+  const recognizedMeasureIds = new Set(); // measure keys (e.g. "weight_loss") seen with at least one mapped row, regardless of whether that measure also had cutpoint columns
+  const duplicateMeasureRows = new Set(); // "facilityId/measureId" seen more than once (later row silently wins)
+  const invalidNumericValues = []; // {facilityId, measureId, column, raw} — present but not parseable as a number or "NA"
+  const seenFacilityMeasure = new Set();
+  let dataRowCount = 0;
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || row.length < 2) continue;
     const fid = row[col.facilityId];
     if (!fid) continue;
-    year = year || row[col.year];
+    dataRowCount++;
+    const rowYear = row[col.year];
+    if (rowYear) yearsSeen.add(rowYear);
+    year = year || rowYear;
     const region = row[col.region];
 
     if (!facilities[fid]) {
@@ -128,7 +134,15 @@ export function parseNhqiCsv(text) {
     }
 
     const key = MEASURE_MAP[mid];
-    if (!key) continue;
+    if (!key) {
+      unmappedMeasureIds.set(mid, (unmappedMeasureIds.get(mid) || 0) + 1);
+      continue;
+    }
+    recognizedMeasureIds.add(key);
+
+    const famKey = `${fid}/${mid}`;
+    if (seenFacilityMeasure.has(famKey)) duplicateMeasureRows.add(famKey);
+    seenFacilityMeasure.add(famKey);
 
     const cpRaw = [toNum(row[col.q1]), toNum(row[col.q2]), toNum(row[col.q3]), toNum(row[col.q4]), toNum(row[col.q5])];
     const hasCp = cpRaw.some(v => v !== null);
@@ -142,7 +156,11 @@ export function parseNhqiCsv(text) {
     // what getQuintile() in scoring.js already assumes for both directions.
     const measureDef = MEASURE_BY_ID[key];
     const cp = measureDef?.higherIsBetter ? cpRaw.slice(1) : cpRaw.slice(0, 4);
-    const numVal = toNum(row[col.numValue]);
+    const rawNumValue = col.numValue !== -1 ? row[col.numValue] : "";
+    const numVal = toNum(rawNumValue);
+    if (numVal === null && rawNumValue && rawNumValue.trim() !== "" && rawNumValue.trim().toUpperCase() !== "NA" && rawNumValue.trim().toUpperCase() !== "SS") {
+      invalidNumericValues.push({ facilityId: fid, measureId: key, column: "Numeric Value", raw: rawNumValue });
+    }
     const charVal = (row[col.charValue] || "").trim();
     let quintile = (row[col.quintile] || "").trim();
     quintile = quintile === "" || quintile.toUpperCase() === "NA" ? null : quintile;
@@ -172,10 +190,35 @@ export function parseNhqiCsv(text) {
   const facilityList = Object.values(facilities).sort((a, b) => a.name.localeCompare(b.name));
   if (facilityList.length === 0) throw new Error("No facility rows found in CSV");
 
+  const mappedMeasureCount = recognizedMeasureIds.size;
+  const warnings = [];
+  if (yearsSeen.size > 1) {
+    warnings.push(`Rows span ${yearsSeen.size} different Measurement Year values (${[...yearsSeen].join(", ")}) — using "${year}" (the first seen); mixed-year rows won't be separated out.`);
+  }
+  if (unmappedMeasureIds.size > 0) {
+    const detail = [...unmappedMeasureIds.entries()].map(([id, n]) => `${id} (${n} row${n === 1 ? "" : "s"})`).join(", ");
+    warnings.push(`${unmappedMeasureIds.size} measure ID${unmappedMeasureIds.size === 1 ? "" : "s"} in the CSV aren't recognized and were skipped entirely: ${detail}.`);
+  }
+  if (duplicateMeasureRows.size > 0) {
+    warnings.push(`${duplicateMeasureRows.size} facility/measure pair${duplicateMeasureRows.size === 1 ? "" : "s"} appeared more than once — the last row for each won, earlier ones were silently discarded.`);
+  }
+  if (invalidNumericValues.length > 0) {
+    warnings.push(`${invalidNumericValues.length} row${invalidNumericValues.length === 1 ? "" : "s"} had a Numeric Value that wasn't a number, "NA", or "SS" — stored as the raw text instead of a usable number.`);
+  }
+
   return {
     year: year || "unknown",
     source: "User-uploaded NY DOH NHQI dataset",
     measures,
     facilities: facilityList,
+    validation: {
+      dataRowCount,
+      facilityCount: facilityList.length,
+      measuresRecognized: mappedMeasureCount,
+      measuresTotalDefined: Object.keys(MEASURE_BY_ID).length,
+      warnings,
+      invalidNumericValues,
+    },
   };
 }
+
